@@ -1,0 +1,26 @@
+{
+    "name": "ajthenewguy/php-cli",
+    "description": "A generic CLI library for creating command line interface programs.",
+    "type": "library",
+    "require-dev": {
+        "phpunit/phpunit": "^9.4@dev",
+        "phpstan/phpstan": "^0.12.0@dev"
+    },
+    "authors": [
+        {
+            "name": "Allen McCabe",
+            "email": "allenmccabe@gmail.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "PhpCli\\": "src/",
+            "Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "require": {},
+    "scripts": {
+        "phpunit": "vendor/phpunit/phpunit/phpunit"
+    }
+}

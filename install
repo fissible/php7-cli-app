@@ -1,0 +1,60 @@
+#!/usr/bin/env php
+<?php
+if (version_compare(phpversion(), '7.4.0', '<')) {
+    print "ERROR: PHP version must be greater than or equal to 7.4.0";
+    exit(1);
+}
+if (version_compare(phpversion(), '7.9.9', '>')) {
+    print "ERROR: PHP version must be less than or equal to 7.9.9";
+    exit(1);
+}
+
+require_once('/Users/allen/scripts/cli/vendor/autoload.php');
+
+$app = new PhpCli\Hatchery(
+    basename(__FILE__),
+    ['h', 'help', 'hatch'], // flags
+    [], // params that require values
+    []  // params with optional values
+);
+
+$app->bind('install', function () use ($app) {
+    $fileContent = <<<EOF
+#!/usr/bin/env php
+<?php
+if (version_compare(phpversion(), '7.4.0', '<')) {
+    print "ERROR: PHP version must be greater than or equal to 7.4.0";
+    exit(1);
+}
+if (version_compare(phpversion(), '7.9.9', '>')) {
+    print "ERROR: PHP version must be less than or equal to 7.9.9";
+    exit(1);
+}
+
+require_once('/Users/allen/scripts/cli/vendor/autoload.php');
+
+\$app = new PhpCli\Hatchery(
+    basename(__FILE__),
+    ['h', 'help', 'hatch'], // flags
+    [], // params that require values
+    []  // params with optional values
+);
+\$app->do('hatch');
+\$app->exit();
+EOF;
+    $saveTo = $app->prompt('Write "hatch" binary to (directory): ');
+    if (substr($saveTo, -6) !== DIRECTORY_SEPARATOR . 'hatch') {
+        $saveTo = rtrim($saveTo, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'hatch';
+    }
+    if (0 !== strpos($saveTo, DIRECTORY_SEPARATOR)) {
+        $saveTo = __DIR__ . DIRECTORY_SEPARATOR . $saveTo;
+    }
+
+    if (file_put_contents($saveTo, $fileContent)) {
+        $app->linef('New binary written to %s', $saveTo);
+        chmod($saveTo, 0755);
+    }
+});
+
+$app->do('install');
+$app->exit();
