@@ -61,15 +61,6 @@ EOF;
         $this->assertEquals('v=>false', $output[1]);
     }
 
-    // public function testMissingRequired()
-    // {
-    //     $this->assertFileExists($this->file);
-
-    //     exec("php $this->file -v 2>/dev/null", $output, $return);
-        
-    //     $this->assertEquals(255, $return); // UnderflowException
-    // }
-
     public function tearDown(): void
     {
         parent::tearDown();

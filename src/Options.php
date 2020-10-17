@@ -108,9 +108,10 @@ class Options {
                     case 'false':
                         $options[$option] = filter_var($options[$option], FILTER_VALIDATE_BOOLEAN);
                     break;
+                    default:
+                        
+                    break;
                 }
-            } else {
-                // throw new \UnderflowException(sprintf('Parameter "%s" requires a value ', $option));
             }
         }
 
