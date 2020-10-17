@@ -9,7 +9,7 @@ if (version_compare(phpversion(), '7.9.9', '>')) {
     exit(1);
 }
 
-require_once('/Users/allen/scripts/cli/vendor/autoload.php');
+require_once(__DIR__ . '/vendor/autoload.php');
 
 $app = new PhpCli\Hatchery(
     basename(__FILE__),
@@ -19,9 +19,11 @@ $app = new PhpCli\Hatchery(
 );
 
 $app->bind('install', function () use ($app) {
+    $pathToPhpCli = __DIR__ . '/vendor/autoload.php';
     $fileContent = <<<EOF
 #!/usr/bin/env php
 <?php
+\$pathToPhpCli = '$pathToPhpCli'; // Update this if you move PhpCli
 if (version_compare(phpversion(), '7.4.0', '<')) {
     print "ERROR: PHP version must be greater than or equal to 7.4.0";
     exit(1);
@@ -31,7 +33,7 @@ if (version_compare(phpversion(), '7.9.9', '>')) {
     exit(1);
 }
 
-require_once('/Users/allen/scripts/cli/vendor/autoload.php');
+require_once(\$pathToPhpCli);
 
 \$app = new PhpCli\Hatchery(
     basename(__FILE__),
@@ -43,9 +45,18 @@ require_once('/Users/allen/scripts/cli/vendor/autoload.php');
 \$app->exit();
 EOF;
     $saveTo = $app->prompt('Write "hatch" binary to (directory): ');
+
+    /*
+        if $saveTo does not end with "/hatch"
+            append it: $saveTo."/hatch"
+    */
     if (substr($saveTo, -6) !== DIRECTORY_SEPARATOR . 'hatch') {
         $saveTo = rtrim($saveTo, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'hatch';
     }
+    /*
+        if $saveTo does not start with "/"
+            assume install to relative dir, `pwd`/$saveTo
+    */
     if (0 !== strpos($saveTo, DIRECTORY_SEPARATOR)) {
         $saveTo = __DIR__ . DIRECTORY_SEPARATOR . $saveTo;
     }
