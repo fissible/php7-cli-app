@@ -81,16 +81,16 @@ class Hatchery extends Application
             What is the name of your CLI app?
         */
 
-        $name = $this->prompt('New CLI app name [eg. Hatchery]: ');
+        $name = $this->prompt('New CLI app name (eg. Hatchery): ', null, true);
         $className = ucfirst($name);
-        $phpVersionMinimum = $this->prompt(sprintf('Minimum PHP version required [eg. %s]: ', PHP_VERSION));
-        $phpVersionMaximum = $this->prompt('Maximum PHP version allowed [eg. 7.9.9]: ');
+        $phpVersionMinimum = $this->prompt('Minimum PHP version required: ', PHP_VERSION);
+        $phpVersionMaximum = $this->prompt('Maximum PHP version allowed [none]: ');
         $path = dirname(dirname(__FILE__));
 
         if ($phpVersionMinimum) {
             $phpVersionMinimum = <<<EOT
 if (version_compare(phpversion(), '$phpVersionMinimum', '<')) {
-    print "ERROR: PHP version must be greater than or equal to $phpVersionMinimum";
+    print "ERROR: PHP version must cannot be less than $phpVersionMinimum";
     exit(1);
 }
 
@@ -100,7 +100,7 @@ EOT;
         if ($phpVersionMaximum) {
             $phpVersionMaximum = <<<EOT
 if (version_compare(phpversion(), '$phpVersionMaximum', '>')) {
-    print "ERROR: PHP version must be less than or equal to $phpVersionMaximum";
+    print "ERROR: PHP version cannot be greater than $phpVersionMaximum";
     exit(1);
 }
 

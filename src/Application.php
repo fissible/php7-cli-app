@@ -209,11 +209,32 @@ class Application
 
     /**
      * @param string|null $prompt
+     * @param string|null $default
+     * @param bool $required
      * @return string
      */
-    public function prompt(string $prompt): string
+    public function prompt(string $prompt, ?string $default = null, $required = false): string
     {
+        if (!is_null($default)) {
+            $suffix = '';
+            if (substr($prompt, -1) === ' ') {
+                $prompt = rtrim($prompt, ' ');
+                $suffix = ' ';
+            }
+            if (substr($prompt, -1) === ':') {
+                $prompt = rtrim($prompt, ':');
+                $suffix = ': ';
+            }
+
+            $prompt = rtrim($prompt) . ' [' . $default .']' . $suffix;
+        }
         $this->input = readline($prompt);
+        if (empty($this->input) && !is_null($default)) {
+            $this->input = $default;
+        }
+        while (empty($this->input) && $required) {
+            $this->input = readline($prompt);
+        }
         return $this->input;
     }
 
