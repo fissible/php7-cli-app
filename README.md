@@ -3,8 +3,8 @@ A PHP command line interface library and generator script
 
 ## Installation of generator script
 ```
-$ cd <repo>
-$ ./install
+$ git clone https://github.com/ajthenewguy/php7-cli-app .
+$ php7-cli-app/install
 Write "hatch" binary to (directory): ~/scripts
 New binary written to ~/scripts/hatch
 ```
