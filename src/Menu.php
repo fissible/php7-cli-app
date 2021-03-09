@@ -4,7 +4,7 @@ namespace PhpCli;
 
 class Menu
 {
-    private Application $app;
+    private Application $Application;
 
     private array $items;
 
@@ -12,14 +12,19 @@ class Menu
 
     private string $prompt;
 
-    public function __construct(Application $app, array $items = [], string $label = 'name', ?string $prompt = null)
-    {
-        $this->app = $app;
-        $this->items = $items;
-        $this->label = $label;
+    private bool $returnValue = false;
 
-        if (isset($prompt)) {
+    public function __construct(Application $Application, array $items = [], ?string $prompt = 'Choose: ', ?string $label = null)
+    {
+        $this->Application = $Application;
+        $this->items = $items;
+        
+        if ($prompt) {
             $this->prompt = $prompt;
+        }
+
+        if (isset($label)) {
+            $this->label = $label;
         }
     }
 
@@ -38,45 +43,75 @@ class Menu
 
     /**
      * @param string|null $prompt
-     * @param bool $getKey
      * @return mixed
      */
-    public function prompt(string $prompt = null, bool $getKey = true)
+    public function prompt(string $prompt = null)
     {
-        $input = $this->app->prompt($prompt ?? $this->prompt);
-        $numeric = is_numeric($input);
-
-        if (array_key_exists($input, $this->items) || ($numeric && array_key_exists((int) $input, $this->items))) {
-            if ($input !== null) {
-                foreach ($this->items as $key => $value) {
-                    // 1 == '1'
-                    if (is_int($key) && $numeric && is_string($input)) {
-                        $input = (int) $input;
-                    }
-                    if ($key === $input) {
-                        return $value;
-                    }
-                }
-            }
+        $input = $this->Application->prompt($prompt ?? $this->prompt);
+        
+        if (key($this->items) === 0 && is_numeric($input) && (int) $input > 0) {
+            $input = intval($input);
+            $input--;
         }
+
+        try {
+            if (!$this->returnValue && $this->hasKey($input)) {
+                return $input;
+            }
+            return $this->getValue($input);
+        } catch (\InvalidArgumentException $e) {
+            //
+        }
+
         return null;
     }
 
-    /*
-    public function prompt(string $prompt): string
+    /**
+     * @param string|int $key
+     * @return bool
+     */
+    public function hasKey($key): bool
     {
-        $this->input = readline($prompt);
-        return $this->input;
+        if (!is_null($key) && array_key_exists($key, $this->items)) {
+            return true;
+        }
+        if (is_numeric($key) && array_key_exists((int)$key, $this->items)) {
+            return true;
+        }
+        return false;
     }
-    */
+
+    /**
+     * @param string|int $key
+     * @return mixed
+     */
+    public function getValue($key)
+    {
+        foreach ($this->items as $_ => $value) {
+            if ($this->hasKey($key)) {
+                return $value;
+            }
+        }
+        throw new \InvalidArgumentException(sprintf('"%s" is an invalid option', $key));
+    }
 
     /**
      * Output the menu items
      */
-    public function list(): void
+    public function list(): self
     {
         $label = $this->label ?? 'name';
-        foreach ($this->items as $command => $description) {
+        $items = $this->items;
+
+        // Increment array keys by 1 if 0-indexed
+        if (key($items) === 0) {
+            $items = array_combine(
+                array_map(function ($key) { return ++$key; }, array_keys($items)),
+                $items
+            );
+        }
+
+        foreach ($items as $command => $description) {
             if (!is_scalar($description)) {
                 if (is_object($description)) {
                     $description = $description->$label;
@@ -84,7 +119,25 @@ class Menu
                     $description = $description[$label];
                 }
             }
-            $this->app->output->linef(' [%s] %s', $command, $description);
+            $this->Application->output->linef(' [%s] %s', $command, $description);
         }
+
+        return $this;
+    }
+
+    /**
+     * If true the menu prompt will return the item value instead of the key.
+     *   $items = [0 => 'First', 1 => 'Second'];
+     *   $this->prompt(): 1
+     *   $this->setReturnValue(true);
+     *   $this->prompt(): 'Second'
+     * 
+     * @param bool $bool
+     * @return Menu
+     */
+    public function setReturnValue(bool $bool): self
+    {
+        $this->returnValue = $bool;
+        return $this;
     }
 }

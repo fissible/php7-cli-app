@@ -1,0 +1,56 @@
+#!/usr/bin/env php
+<?php
+if (version_compare(phpversion(), '7.4.6', '<')) {
+    print "ERROR: PHP version must cannot be less than 7.4.6";
+    exit(1);
+}
+
+define('BINARY_PATH', 'vendor/bin/phpunit');
+
+require_once(__DIR__.'/vendor/autoload.php');
+
+/**
+ * APPLICATION
+ */
+final class Tester extends PhpCli\Application
+{
+    protected function init(): void
+    {
+        $this->defaultCommand = new PhpCli\BinaryCommand($this, BINARY_PATH);
+    }
+
+    protected function defineOptions($options = []): array
+    {
+        $defaultValue = BINARY_PATH;
+
+        // --path vendor/bin/phpunit
+        $options[] = new PhpCli\Option(
+            $flagName = 'path',
+            $requiresValue = true,
+            $description = 'Path to PhpUnit binary, default is: ' . $defaultValue,
+            $defaultValue
+        );
+
+        return parent::defineOptions($options);
+    }
+
+    protected function defineArguments($arguments = []): array
+    {
+        $arguments[] = new PhpCli\Argument('directory', $requiresValue = false, $defaultValue = 'tests');
+        
+        return parent::defineArguments($arguments);
+    }
+
+    public function run($command = null): int
+    {
+        if ($this->path) {
+            $this->defaultCommand->setBinary($this->path);
+            $this->Parameters->drop('path');
+        }
+
+        return (int) $this->defaultCommand->run();
+    }
+}
+
+
+(new Tester())->run();

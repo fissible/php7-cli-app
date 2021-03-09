@@ -11,61 +11,49 @@ if (version_compare(phpversion(), '7.9.9', '>')) {
 
 require_once(__DIR__ . '/vendor/autoload.php');
 
-$app = new PhpCli\Hatchery(
-    basename(__FILE__),
-    ['h', 'help', 'hatch'], // flags
-    [], // params that require values
-    []  // params with optional values
-);
+$app = new PhpCli\Hatchery(basename(__FILE__));
 
 $app->bind('install', function () use ($app) {
     $pathToPhpCli = __DIR__ . '/vendor/autoload.php';
-    $fileContent = <<<EOF
-#!/usr/bin/env php
-<?php
-\$pathToPhpCli = '$pathToPhpCli'; // Update this if you move PhpCli
-if (version_compare(phpversion(), '7.4.0', '<')) {
-    print "ERROR: PHP version must be greater than or equal to 7.4.0";
-    exit(1);
-}
-if (version_compare(phpversion(), '7.9.9', '>')) {
-    print "ERROR: PHP version must be less than or equal to 7.9.9";
-    exit(1);
-}
 
-require_once(\$pathToPhpCli);
+    // Copy local hatch file and replace the require path for local installation.
+    $fileContent = explode("\n", file_get_contents('./hatch'));
+    foreach ($fileContent as $key => $line) {
+        $matches = [];
+        $regex = '/require_once\((["\'])(.*?)\1\)/';
+        if (preg_match($regex, $line, $matches) === 1) {
+            $fileContent[$key] = str_replace($matches[2], $pathToPhpCli, $line);
+        }
+    }
+    $fileContent = implode("\n", $fileContent);
 
-\$app = new PhpCli\Hatchery(
-    basename(__FILE__),
-    ['h', 'help', 'hatch'], // flags
-    [], // params that require values
-    []  // params with optional values
-);
-\$app->do('hatch');
-\$app->exit();
-EOF;
     $saveTo = $app->prompt('Write "hatch" binary to (directory): ');
 
     /*
-        if $saveTo does not end with "/hatch"
-            append it: $saveTo."/hatch"
+    if $saveTo does not end with "/hatch"
+        append it: $saveTo."/hatch"
     */
     if (substr($saveTo, -6) !== DIRECTORY_SEPARATOR . 'hatch') {
         $saveTo = rtrim($saveTo, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'hatch';
     }
     /*
-        if $saveTo does not start with "/"
-            assume install to relative dir, `pwd`/$saveTo
+    if $saveTo does not start with "/"
+        assume install to relative dir, `pwd`/$saveTo
     */
     if (0 !== strpos($saveTo, DIRECTORY_SEPARATOR)) {
         $saveTo = __DIR__ . DIRECTORY_SEPARATOR . $saveTo;
     }
 
-    if (file_put_contents($saveTo, $fileContent)) {
-        $app->linef('New binary written to %s', $saveTo);
-        chmod($saveTo, 0755);
-    }
-});
+    $File = new \PhpCli\Filesystem\File($saveTo);
 
-$app->do('install');
+    if ($File->exists() && !$app->promptYesNo('File already exists at the indicated path, overwrite?')) {
+        $app->line('Aborting.');
+        $app->exit();
+    }
+
+    if ($File->write($fileContent)) {
+        $app->linef('New binary written to %s', $saveTo);
+        $File->chmod(0755);
+    }
+})->do('install');
 $app->exit();

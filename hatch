@@ -1,0 +1,13 @@
+#!/usr/bin/env php
+<?php
+if (version_compare(phpversion(), '7.4.0', '<')) {
+    print "ERROR: PHP version must be greater than or equal to 7.4.0";
+    exit(1);
+}
+
+// The installation script replaces the path in the following require_once on copy
+require_once('~/scripts/cli/vendor/autoload.php');
+
+$app = new PhpCli\Hatchery(basename(__FILE__));
+$app->do('hatch');
+$app->exit();

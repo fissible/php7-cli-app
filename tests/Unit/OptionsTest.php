@@ -3,68 +3,46 @@
 namespace Tests\Unit;
 
 use Tests\TestCase;
+use PhpCli\Option;
+use PhpCli\Options;
+use PhpCli\Parameters;
+use PhpCli\Events\Event;
+use PhpCli\Events\AddParameterEvent;
+use PhpCli\Events\DropParameterEvent;
 
-final class OptionsTest extends TestCase
+class OptionsTest extends TestCase
 {
-    public $file;
+    public $Options;
+
+    public $Parameters;
 
     public function setUp(): void
     {
-        parent::setUp();
-
-        $this->file = __DIR__ . 'cli_' . basename(__FILE__);
-
-        $contents = <<<'EOF'
-<?php
-require('./vendor/autoload.php');
-use PhpCli\Options;
-$Options = new Options(['v'], ['file'], ['output']);
-foreach($Options->get() as $key => $value) {
-    print $key . '=>'. (is_bool($value) ? ($value ? 'true' : 'false') : $value)."\n";
-}
-EOF;
-
-        file_put_contents($this->file, $contents);
+        $this->Parameters = new Parameters();
+        $this->Options = $this->Parameters->getOptions();
     }
 
-    public function testGetAll()
+    public function testPushPull()
     {
-        $this->assertFileExists($this->file);
+        $Option = new Option('testing');
+        $Pulled = new \PhpCli\Collection();
 
-        exec("php $this->file --file=in.txt --output=out.xml -v", $output, $return);
+        $this->assertEquals(0, $this->Options->count());
+        $this->assertEmpty($this->Parameters->options);
 
-        $this->assertCount(3, $output);
-        $this->assertEquals('file=>in.txt', $output[0]);
-        $this->assertEquals('output=>out.xml', $output[1]);
-        $this->assertEquals('v=>true', $output[2]);
-    }
+        $count = $this->Options->push($Option);
 
-    public function testGetSome()
-    {
-        $this->assertFileExists($this->file);
+        $this->assertEquals(1, $count);
+        $this->assertEquals(1, $this->Options->count());
+        $this->assertNotNull($this->Parameters->options);
 
-        exec("php $this->file --file=in.txt -v", $output, $return);
 
-        $this->assertCount(2, $output);
-        $this->assertEquals('file=>in.txt', $output[0]);
-        $this->assertEquals('v=>true', $output[1]);
-    }
+        $Pulled = $this->Options->pull(function (Option $Opt) {
+            return $Opt->name() == 'testing';
+        });
 
-    public function testGetOne()
-    {
-        $this->assertFileExists($this->file);
-
-        exec("php $this->file --file=in.txt", $output, $return);
-
-        $this->assertCount(2, $output);
-        $this->assertEquals('file=>in.txt', $output[0]);
-        $this->assertEquals('v=>false', $output[1]);
-    }
-
-    public function tearDown(): void
-    {
-        parent::tearDown();
-
-        unlink($this->file);
+        $this->assertEquals(1, $Pulled->count());
+        $this->assertEquals(0, $this->Options->count());
+        $this->assertEquals($Option, $Pulled->first());
     }
 }

@@ -13,13 +13,19 @@
         }
     ],
     "autoload": {
+        "files": [
+            "src/functions.php"
+        ],
         "psr-4": {
             "PhpCli\\": "src/",
             "Tests\\": "tests/"
         }
     },
     "minimum-stability": "dev",
-    "require": {},
+    "require": {
+        "nesbot/carbon": "^2.0@dev",
+        "seld/cli-prompt": "^1.0@dev"
+    },
     "scripts": {
         "phpunit": "vendor/phpunit/phpunit/phpunit"
     }

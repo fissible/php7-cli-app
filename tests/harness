@@ -1,0 +1,137 @@
+#!/usr/bin/env php
+<?php
+if (version_compare(phpversion(), '7.4.6', '<')) {
+    print "ERROR: PHP version must cannot be less than 7.4.6";
+    exit(1);
+}
+
+require_once(dirname(__DIR__).'/vendor/autoload.php');
+
+
+class RunTest extends PhpCli\Command
+{
+    public static $testCallback;
+
+    public function run()
+    {
+        if ($this->app()->path) {
+            $this->app()->line($this->app()->path);
+            return $this->exit();
+        }
+        if ($this->app()->argv) {
+            $this->app()->output->print(var_export(PhpCli\Parameters::argv(), true));
+            return $this->exit();
+        }
+
+        $this->line();
+        $this->line('Running test harness...');
+
+        $this->printParameters();
+
+        return $this->exit();
+    }
+}
+
+/**
+ * APPLICATION
+ */
+final class TestHarness extends PhpCli\Application
+{
+    public function __construct()
+    {
+        parent::__construct();
+    }
+    
+    protected function init(): void
+    {
+        $this->defaultCommand = new RunTest($this);
+    }
+
+    protected function defineOptions($options = []): array
+    {
+        $defaultValue = dirname(__FILE__);
+
+        // --src ~/tests
+        $options[] = new PhpCli\Option(
+            $flagName = 'src',
+            $requiresValue = false, // ? prob true
+            $description = 'source path, default is: ' . $defaultValue,
+            $defaultValue
+        );
+
+        // --dst ~/some/other/dir
+        $options[] = new PhpCli\Option(
+            $flagName = 'dst',
+            $requiresValue = true,
+            $description = 'destination path'
+        );
+
+        // --log /write/to/file.log
+        $options[] = new PhpCli\Option(
+            $flagName = 'log',
+            $requiresValue = true,
+            $description = 'log file path'
+        );
+
+        // --argv
+        $options[] = new PhpCli\Option(
+            $flagName = 'argv',
+            $requiresValue = null,
+            $description = 'test argv'
+        );
+
+        // -a
+        $options[] = new PhpCli\Option(
+            $flagName = 'a',
+            $requiresValue = null, // does not accept value
+            $description = 'all files'
+        );
+
+        // -f
+        $options[] = new PhpCli\Option(
+            $flagName = 'f',
+            $requiresValue = true,
+            $description = 'filter (requires value)'
+        );
+
+        // -v
+        $options[] = new PhpCli\Option(
+            $flagName = 'v',
+            $requiresValue = true,
+            $description = 'verbosity level (optional value)'
+        );
+
+        return parent::defineOptions($options);
+    }
+
+    protected function defineArguments($arguments = []): array
+    {
+        $arguments[] = new PhpCli\Argument('directory', $requiresValue = false, $defaultValue = 'tests');
+        
+        return parent::defineArguments($arguments);
+    }
+
+    public function printParameters()
+    {
+        $options = $this->Parameters->Options->map(function ($Option) {
+            return [$Option->name(), $Option->value()];
+        })->toArray();
+        
+        $this->line('Options');
+        $this->table([
+            'Name', 'Value'
+        ], $options)->print();
+
+        $arguments = $this->Parameters->Arguments->map(function ($Argument) {
+            return [$Argument->name(), $Argument->value()];
+        })->toArray();
+        
+        $this->line('Argument');
+        $this->table([
+            'Name', 'Value'
+        ], $arguments)->print();
+    }
+}
+
+
+(new TestHarness())->run();

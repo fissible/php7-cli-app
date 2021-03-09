@@ -6,10 +6,10 @@ use PhpCli\Collection;
 use PhpCli\Events\AddParameterEvent;
 use PhpCli\Events\DropParameterEvent;
 use PhpCli\Observers\Observable;
-use PhpCli\Observers\OptionsObserver;
+use PhpCli\Observers\ArgumentsObserver;
 use PhpCli\Observers\Subject;
 
-class Options extends Collection implements Subject
+class Arguments extends Collection implements Subject
 {
     use Observable {
         Observable::__construct as private intialize;
@@ -22,7 +22,7 @@ class Options extends Collection implements Subject
         parent::__construct($set);
         $this->Parameters = $Parameters;
         $this->intialize();
-        $this->attach(new OptionsObserver($this));
+        $this->attach(new ArgumentsObserver($this));
     }
 
     public function Parameters(): Parameters
@@ -31,7 +31,7 @@ class Options extends Collection implements Subject
     }
 
     /**
-     * Pull Options from the Collection.
+     * Pull Arguments from the Collection.
      * 
      * @param $filter
      * @return Collection
@@ -47,14 +47,14 @@ class Options extends Collection implements Subject
     }
 
     /**
-     * Add an Option to the Collection.
+     * Add an Argument to the Collection.
      * 
      * @param $item
      * @return int
      */
     public function push($item): int
     {
-        if (!($item instanceof Option)) {
+        if (!($item instanceof Argument)) {
             throw new \InvalidArgumentException();
         }
         $count = parent::push($item);

@@ -140,8 +140,8 @@ class Table
 
         } else {
             $this->buffer->print($this->options['chars']['left']);
-            $this->buffer->print(str_pad($this->options['no-data-string'], $innerLength));
-            $this->buffer->print($this->options['chars']['right']);
+            $this->buffer->print(str_pad($this->options['no-data-string'], $innerLength, ' ', STR_PAD_BOTH));
+            $this->buffer->printl($this->options['chars']['right']);
         }
 
         // Print bottom border
@@ -156,6 +156,45 @@ class Table
         $this->buffer->printl($this->options['chars']['bottom-right']);
 
         return $this->buffer->flush();
+    }
+
+    public function width()
+    {
+        $cellWidths = $this->cellWidths();
+        return array_sum($cellWidths) + count($cellWidths) - 1;
+    }
+
+    private function cellWidths(): array
+    {
+        $cellWidths = [];
+
+        if (empty($this->headers)) {
+            $cols = 0;
+            foreach ($this->rows as $row) {
+                $c = count($row);
+                if ($c > $cols) $cols = $c;
+            }
+            $cellWidths = array_fill(0, $cols, 0);
+        } else {
+            $cols = count($this->headers);
+            $cellWidths = array_fill(0, $cols, 0);
+
+            foreach ($this->headers as $x => $header) {
+                $w = strlen($header) + 2;
+                if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
+            }
+        }
+
+        foreach ($this->rows as $y => $row) {
+            foreach ($row as $x => $col) {
+                if (isset($cellWidths[$x])) {
+                    $w = strlen((string) $col) + 2;
+                    if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
+                }
+            }
+        }
+
+        return $cellWidths;
     }
 
     /**

@@ -1,0 +1,78 @@
+#!/usr/bin/env php
+<?php
+if (version_compare(phpversion(), '7.4.6', '<')) {
+    print "ERROR: PHP version must cannot be less than 7.4.6";
+    exit(1);
+}
+
+require_once(__DIR__.'/vendor/autoload.php');
+
+/**
+ * APPLICATION
+ */
+final class ParamTester extends PhpCli\Application
+{
+    // protected function init(): void
+    // {
+    //     //
+    // }
+
+    protected function defineOptions($options = []): array
+    {
+        $defaultValue = '/usr/local/etc/bash_completion.d'; // macos
+
+        // --path vendor/bin/phpunit
+        $options[] = new PhpCli\Option(
+            $flagName = 'path',
+            $requiresValue = true,
+            $description = 'path option, default is: ' . $defaultValue,
+            $defaultValue
+        );
+
+        // -f
+        $options[] = new PhpCli\Option(
+            $flagName = 'f',
+            $requiresValue = null,
+            $description = 'generic flag'
+        );
+
+        return parent::defineOptions($options);
+    }
+
+    protected function defineArguments($arguments = []): array
+    {
+        $arguments[] = new PhpCli\Argument('directory', $requiresValue = false, $defaultValue = 'src');
+        
+        return parent::defineArguments($arguments);
+    }
+}
+
+
+$app = new ParamTester();
+$app->setDefaultPrompt(' > ');
+$app->bind('info', function ($app) {
+    $options = $app->Parameters->Options->map(function ($Option) {
+        return [$Option->name(), $Option->value()];
+    })->toArray();
+    
+    $app->line('Options');
+	$app->table([
+        'Name', 'Value'
+    ], $options)->print();
+
+    $arguments = $app->Parameters->Arguments->map(function ($Argument) {
+        return [$Argument->name(), $Argument->value()];
+    })->toArray();
+    
+    $app->line('Argument');
+	$app->table([
+        'Name', 'Value'
+    ], $arguments)->print();
+});
+
+
+/**
+ * Start the application session.
+ */
+
+$app->run('info');
