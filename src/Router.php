@@ -40,13 +40,13 @@ class Router {
         return !is_null($Route);
     }
 
-    public function route(string $name)
+    public function route(string $name, array $params = [])
     {
         $Route = $this->getRoute($name);
 
         $this->validate($Route);
 
-        return $Route->run($this->Application);
+        return $Route->run($this->Application, $params);
     }
 
     public function validate($route)

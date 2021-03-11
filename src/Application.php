@@ -129,11 +129,11 @@ class Application
         $this->Router->bind(new Route($name, $action));
     }
 
-    public function route($input)
+    public function route($input, array $params = [])
     {
         try {
             $returnCode = 0;
-            $return = $this->Router->route($input);
+            $return = $this->Router->route($input, $params);
 
             if (is_int($return)) {
                 $returnCode = $return;

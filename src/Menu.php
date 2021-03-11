@@ -17,7 +17,7 @@ class Menu
     public function __construct(Application $Application, array $items = [], ?string $prompt = 'Choose: ', ?string $label = null)
     {
         $this->Application = $Application;
-        $this->items = $items;
+        $this->setItems($items);
         
         if ($prompt) {
             $this->prompt = $prompt;
@@ -72,7 +72,7 @@ class Menu
      */
     public function hasKey($key): bool
     {
-        if (!is_null($key) && array_key_exists($key, $this->items)) {
+        if (!is_null($key) && array_key_exists(strtolower($key), $this->items)) {
             return true;
         }
         if (is_numeric($key) && array_key_exists((int)$key, $this->items)) {
@@ -122,6 +122,22 @@ class Menu
             $this->Application->output->linef(' [%s] %s', $command, $description);
         }
 
+        return $this;
+    }
+
+    /**
+     * @param array $items
+     * @return self
+     */
+    public function setItems(array $items): self
+    {
+        $this->items = [];
+        foreach ($items as $key => $value) {
+            if (!is_numeric($key) && is_string($key)) {
+                $key = strtolower($key);
+            }
+            $this->items[$key] = $value;
+        }
         return $this;
     }
 

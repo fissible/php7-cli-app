@@ -39,11 +39,11 @@ class Route {
         return false;
     }
 
-    public function run(Application $Application)
+    public function run(Application $Application, array $params = [])
     {
         if (isset($this->callable)) {
             $function = $this->callable;
-            return $function($Application);
+            return $function($Application, ...$params);
         }
 
         if (isset($this->Command)) {
