@@ -72,11 +72,13 @@ class Menu
      */
     public function hasKey($key): bool
     {
-        if (!is_null($key) && array_key_exists(strtolower($key), $this->items)) {
-            return true;
+        if (is_null($key)) return false;
+        if (is_numeric($key)) {
+            $key = intval($key);
+            return array_key_exists($key, $this->items);
         }
-        if (is_numeric($key) && array_key_exists((int)$key, $this->items)) {
-            return true;
+        if (is_string($key)) {
+            return array_key_exists(strtolower($key), $this->items);
         }
         return false;
     }
@@ -87,12 +89,20 @@ class Menu
      */
     public function getValue($key)
     {
+        if (!$this->hasKey($key)) {
+            throw new \InvalidArgumentException(sprintf('"%s" is an invalid option', $key));
+        }
         foreach ($this->items as $_ => $value) {
-            if ($this->hasKey($key)) {
+            if ($key === $_) {
                 return $value;
             }
         }
-        throw new \InvalidArgumentException(sprintf('"%s" is an invalid option', $key));
+        foreach ($this->items as $_ => $value) {
+            if ($key == $_) {
+                return $value;
+            }
+        }
+        return null;
     }
 
     /**

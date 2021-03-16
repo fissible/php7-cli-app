@@ -116,9 +116,10 @@ class Parameters
     public function isMissingRequiredArgument($name = null)
     {
         foreach ($this->Arguments as $Argument) {
-            if ((is_null($name) || $Argument->name() === $name) && 
-                $Argument->isRequired() && $Argument->empty()) {
-                return $name;
+            if (is_null($name) || $Argument->is($name)) {
+                if ($Argument->isRequired() && $Argument->empty()) {
+                    return $Argument->name();
+                }
             }
         }
         return false;
@@ -222,6 +223,14 @@ class Parameters
 
         return getopt($shortopts, $longopts);
     }
+
+    public function validateHasRequiredArguments()
+    {
+        if ($argName = $this->isMissingRequiredArgument()) {
+            throw new Exceptions\MissingArgumentException($argName);
+        }
+        return $this;
+    }
     
     public function __get($name)
     {
@@ -242,13 +251,5 @@ class Parameters
         }
 
         return null;
-    }
-
-    private function validateHasRequiredArguments()
-    {
-        if ($argName = $this->isMissingRequiredArgument()) {
-            throw new Exceptions\MissingArgumentException($argName);
-        }
-        return $this;
     }
 }

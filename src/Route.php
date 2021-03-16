@@ -47,7 +47,7 @@ class Route {
         }
 
         if (isset($this->Command)) {
-            return $this->Command->run();
+            return $this->Command->run(...$params);
         }
     }
 

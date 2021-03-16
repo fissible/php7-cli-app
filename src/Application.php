@@ -61,13 +61,18 @@ class Application
 
         // readline_completion_function([__CLASS__, 'completionCallback']);
 
-        // $Help = $this->Parameters->getOption('help');
-        // if ($Help && $Help->value()) {
-        //     $this->do('help');
-        //     $this->exit();
-        // }
+        $Help = $this->Parameters->getOption('help');
+        if ($Help && $Help->value()) {
+            $this->doHelp();
+            $this->exit();
+        }
 
         $this->init();
+    }
+
+    public function checkMissingParameters()
+    {
+        $this->Parameters->validateHasRequiredArguments();
     }
 
     public function clear()
@@ -159,6 +164,8 @@ class Application
      */
     public function run($command = null)
     {
+        $this->checkMissingParameters();
+
         $defaultCommand = $command;
 
         try {
@@ -168,6 +175,8 @@ class Application
                 if (is_int($this->return)) {
                     $this->returnCode = $this->return;
                 }
+            } elseif (!is_null($command) && $command instanceof Command) {
+                return $command->run();
             } else {
                 $this->mainLoop($defaultCommand);
             }
@@ -563,17 +572,19 @@ class Application
     /**
      * Output the menu item list and prompt/return selection.
      * 
-     * @param string $name
+     * @param string|array $nameOrOptions
      * @param string|null $prompt
      * @param string|null $title
+     * @param bool $returnValue
      * @return string|null
      */
-    public function menuPrompt(string $name, string $prompt = null, string $title = null)
+    public function menuPrompt($nameOrOptions, string $prompt = null, string $title = null, bool $returnValue = false)
     {
-        $Menu = $this->menu($name, $title);
+        $Menu = $this->menu($nameOrOptions, $title);
+        $Menu->setReturnValue($returnValue);
         $selection = $Menu->prompt($prompt);
 
-        if (!is_null($selection) && strlen($selection)) {
+        if (!is_null($selection) && (is_string($selection) && strlen($selection) || is_int($selection))) {
             return $selection;
         }
         return null;
@@ -672,6 +683,67 @@ class Application
     public function table(array $headers = [], array $rows = [], array $options = [])
     {
         return new Table($this, $headers, $rows, $options);
+    }
+
+    /**
+     * @param string $content
+     * @return string
+     */
+    public function textEditor(string $content = '', string $comment = null)
+    {
+        $binary = 'vim';
+        if (!self::binaryInstalled($binary)) {
+            $binary = 'vi';
+            self::requireBinary($binary);
+        }
+
+        if (!empty($comment)) {
+            $parts = explode("\n", $comment);
+            $parts = array_map(function ($line) {
+                return '# '.$line;
+            }, $parts);
+            $comment = implode("\n", $parts);
+            $content = $comment."\n".$content;
+        }
+
+        $file = tmpfile();
+        fwrite($file, $content);
+        $path = stream_get_meta_data($file)['uri'];
+        system($binary. ' '.$path." > `tty`");
+        $content = rtrim(file_get_contents($path), "\n");
+        fclose($file);
+
+        if (!empty($comment)) {
+            $parts = explode("\n", $comment);
+            $lines = explode("\n", $content);
+            for ($i = 0; $i < count($parts); $i++) {
+                if (isset($lines[$i]) && $lines[$i] === $parts[$i]) {
+                    unset($lines[$i]);
+                } else {
+                    break;
+                }
+            }
+            $content = implode("\n", $lines);
+        }
+
+        return $content;
+    }
+
+    public static function binaryInstalled(string $name, string $binary = null)
+    {
+        if (is_null($binary)) $binary = $name;
+        if (!`which ${binary}`) {
+            return false;
+        }
+        return true;
+    }
+
+    public static function requireBinary(string $name, string $binary = null)
+    {
+        if (is_null($binary)) $binary = $name;
+        if (!`which ${binary}`) {
+            throw new \RuntimeException(sprintf('Error: %s is not installed.', $name));
+        }
     }
 
     public function __get($name)
