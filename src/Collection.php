@@ -205,6 +205,33 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
         return array_shift($this->set);
     }
 
+    public function sort(callable $function = null): Collection
+    {
+        $set = clone $this->set;
+        if (is_null($function)) {
+            sort($set);
+        } else {
+            uasort($set, $function);
+        }
+
+        $Collection = new Collection($set);
+
+        return $Collection;
+    }
+
+    public function take(int $count): Collection
+    {
+        if ($count < 0) {
+            $set = array_slice($this->set, $count);
+        } else {
+            $set = array_slice($this->set, 0, $count);
+        }
+
+        $Collection = new Collection($set);
+
+        return $Collection;
+    }
+
     public function toArray(): array
     {
         return $this->set;

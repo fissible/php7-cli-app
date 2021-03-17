@@ -136,23 +136,18 @@ class Application
 
     public function route($input, array $params = [])
     {
-        try {
-            $returnCode = 0;
-            $return = $this->Router->route($input, $params);
+        $returnCode = 0;
+        $return = $this->Router->route($input, $params);
 
-            if (is_int($return)) {
-                $returnCode = $return;
-            }
-
-            if ($returnCode !== 0) {
-                throw new Abort($returnCode);
-            }
-
-            return $return;
-        } catch (\RuntimeException $e) {
-            $this->line('Invalid command.');
+        if (is_int($return)) {
+            $returnCode = $return;
         }
-        return null;
+
+        if ($returnCode !== 0) {
+            throw new Abort($returnCode);
+        }
+
+        return $return;
     }
 
     /**
