@@ -207,7 +207,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function sort(callable $function = null): Collection
     {
-        $set = clone $this->set;
+        $set = $this->set;
         if (is_null($function)) {
             sort($set);
         } else {
