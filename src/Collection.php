@@ -51,7 +51,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function copy()
     {
-        return new Collection($this->set);
+        return new static($this->set);
     }
 
     public function count(): int
@@ -95,7 +95,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function filter(callable $filter): Collection
     {
-        $Collection = new Collection();
+        $Collection = new static();
         foreach ($this->set as $key => $value) {
             if ($filter($value, $key) === true) {
                 $Collection->push($value);
@@ -124,6 +124,19 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
             return $default($this);
         }
         return $default;
+    }
+
+    public function isAssociative(): bool
+    {
+        foreach (array_keys($this->set) as $key) {
+            if (!is_int($key)) return true;
+        }
+        return false;
+    }
+
+    public function isNumeric(): bool
+    {
+        return !$this->isAssociative();
     }
 
     public function last(callable $filter = null)
@@ -161,6 +174,25 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
         return $Collection;
     }
 
+    public function merge($iterable): Collection
+    {
+        if (!is_iterable($iterable)) {
+            throw new \InvalidArgumentException();
+        }
+
+        $isAssociative = $this->isAssociative();
+        $Collection = $this->copy();
+        foreach ($iterable as $key => $value) {
+            if ($isAssociative) {
+                $Collection->set($key, $value);
+            } else {
+                $Collection->push($value);
+            }
+        }
+
+        return $Collection;
+    }
+
     public function pop()
     {
         return array_pop($this->set);
@@ -168,7 +200,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function pull($filter): Collection
     {
-        $Collection = new Collection();
+        $Collection = new static();
         foreach ($this->set as $key => $value) {
             if ((is_callable($filter) && $filter($value, $key) === true) || $filter === $key) {
                 $Collection->push($value);
@@ -205,18 +237,16 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
         return array_shift($this->set);
     }
 
-    public function sort(callable $function = null): Collection
+    public function sort(callable $function = null, int $flags = SORT_REGULAR): Collection
     {
         $set = $this->set;
         if (is_null($function)) {
-            sort($set);
+            sort($set, $flags);
         } else {
             uasort($set, $function);
         }
 
-        $Collection = new Collection($set);
-
-        return $Collection;
+        return new static($set);
     }
 
     public function take(int $count): Collection
@@ -227,9 +257,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
             $set = array_slice($this->set, 0, $count);
         }
 
-        $Collection = new Collection($set);
-
-        return $Collection;
+        return new static($set);
     }
 
     public function toArray(): array
@@ -264,7 +292,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
      */
     public function values(): Collection
     {
-        $Collection = new Collection();
+        $Collection = new static();
         foreach ($this->set as $key => $value) {
             $Collection->push($value);
         }
