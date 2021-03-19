@@ -237,6 +237,12 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
         return array_shift($this->set);
     }
 
+    public function slice(int $index, int $count = null): Collection
+    {
+        $preserve_keys = $this->isAssociative();
+        return new static(array_slice($this->set, $index, $count, $preserve_keys));
+    }
+
     public function sort(callable $function = null, int $flags = SORT_REGULAR): Collection
     {
         $set = $this->set;
