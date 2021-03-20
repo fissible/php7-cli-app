@@ -17,15 +17,30 @@ class Menu
     public function __construct(Application $Application, array $items = [], ?string $prompt = 'Choose: ', ?string $label = null)
     {
         $this->Application = $Application;
+
+        if (isset($label)) {
+            $this->label = $label;
+        }
+
         $this->setItems($items);
         
         if ($prompt) {
             $this->prompt = $prompt;
         }
+    }
 
-        if (isset($label)) {
-            $this->label = $label;
+    public function getItems(): array
+    {
+        $first = reset($this->items);
+
+        if (is_array($first)) {
+            $items = array();
+            array_walk_recursive($this->items, function($description, $command) use (&$items) {
+                $items[$command] = $description;
+            });
+            return $items;
         }
+        return $this->items;
     }
 
     /**
@@ -34,11 +49,11 @@ class Menu
      */
     public function getDescription(string $name): ?string
     {
-        if (!array_key_exists($name, $this->items)) {
+        if (!array_key_exists($name, $this->getItems())) {
             return null;
         }
 
-        return $this->items[$name];
+        return $this->getItems()[$name];
     }
 
     /**
@@ -49,7 +64,7 @@ class Menu
     {
         $input = $this->Application->prompt($prompt ?? $this->prompt);
         
-        if (key($this->items) === 0 && is_numeric($input) && (int) $input > 0) {
+        if (key($this->getItems()) === 0 && is_numeric($input) && (int) $input > 0) {
             $input = intval($input);
             $input--;
         }
@@ -73,12 +88,14 @@ class Menu
     public function hasKey($key): bool
     {
         if (is_null($key)) return false;
+        $items = $this->getItems();
+
         if (is_numeric($key)) {
             $key = intval($key);
-            return array_key_exists($key, $this->items);
+            return array_key_exists($key, $items);
         }
         if (is_string($key)) {
-            return array_key_exists(strtolower($key), $this->items);
+            return array_key_exists($key, $items);
         }
         return false;
     }
@@ -89,15 +106,17 @@ class Menu
      */
     public function getValue($key)
     {
+        $items = $this->getItems();
+
         if (!$this->hasKey($key)) {
             throw new \InvalidArgumentException(sprintf('"%s" is an invalid option', $key));
         }
-        foreach ($this->items as $_ => $value) {
+        foreach ($items as $_ => $value) {
             if ($key === $_) {
                 return $value;
             }
         }
-        foreach ($this->items as $_ => $value) {
+        foreach ($items as $_ => $value) {
             if ($key == $_) {
                 return $value;
             }
@@ -110,26 +129,29 @@ class Menu
      */
     public function list(): self
     {
-        $label = $this->label ?? 'name';
         $items = $this->items;
 
         // Increment array keys by 1 if 0-indexed
-        if (key($items) === 0) {
-            $items = array_combine(
-                array_map(function ($key) { return ++$key; }, array_keys($items)),
-                $items
-            );
+        if (key($items) === 0 && (!is_array($items[0]) || key($items[0]) === 0)) {
+            $items = $this->reKey($items, function ($key) {
+                return $key + 1;
+            });
         }
 
-        foreach ($items as $command => $description) {
-            if (!is_scalar($description)) {
-                if (is_object($description)) {
-                    $description = $description->$label;
-                } elseif (is_array($description)) {
-                    $description = $description[$label];
-                }
+        $first = reset($items);
+        if (is_array($first)) {
+            $rows = [];
+            foreach ($items as $row_key => $row) {
+                $rows[] = array_map(function ($command, $description) {
+                    return sprintf(' [%s] %s', $command, $description);
+                }, array_keys($row), $row);
             }
-            $this->Application->output->linef(' [%s] %s', $command, $description);
+
+            $this->Application->table(array_fill(0, count($items), ' '), $rows)->print();
+        } else {
+            foreach ($items as $command => $description) {
+                $this->Application->output->linef(' [%s] %s', $command, $description);
+            }
         }
 
         return $this;
@@ -141,14 +163,41 @@ class Menu
      */
     public function setItems(array $items): self
     {
-        $this->items = [];
-        foreach ($items as $key => $value) {
-            if (!is_numeric($key) && is_string($key)) {
-                $key = strtolower($key);
+        $label = $this->label ?? 'name';
+
+        array_walk_recursive($items, function (&$description, $command) {
+            if (!is_scalar($description)) {
+                if (is_object($description)) {
+                    $description = $description->$label;
+                } elseif (is_array($description)) {
+                    $description = $description[$label];
+                }
             }
-            $this->items[$key] = $value;
-        }
+        });
+
+        $this->items = $items;
+
         return $this;
+    }
+
+    private function reKey(array $array, callable $callback)
+    {
+        // Multidemensional
+        if (key($array) === 0 && is_array($array[0])) {
+            foreach ($array as $top_key => $subarray) {
+                $subarray = array_combine(
+                    array_map($callback, array_keys($subarray)),
+                    $subarray
+                );
+            }
+        } else {
+            $array = array_combine(
+                array_map($callback, array_keys($array)),
+                $array
+            );
+        }
+
+        return $array;
     }
 
     /**

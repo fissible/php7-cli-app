@@ -200,7 +200,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function pull($filter): Collection
     {
-        $Collection = new static();
+        $Collection = new Collection();
         foreach ($this->set as $key => $value) {
             if ((is_callable($filter) && $filter($value, $key) === true) || $filter === $key) {
                 $Collection->push($value);
