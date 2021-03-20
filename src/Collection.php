@@ -95,7 +95,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function filter(callable $filter): Collection
     {
-        $Collection = new static();
+        $Collection = new Collection();
         foreach ($this->set as $key => $value) {
             if ($filter($value, $key) === true) {
                 $Collection->push($value);
