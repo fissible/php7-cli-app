@@ -168,7 +168,7 @@ class Table
                 foreach ($headers as $x => $_header) {
                     $width = $cellWidths[$x];
                     $prev_cell_value = null;
-                    if (isset($this->rows[$y - 1])) {
+                    if ($y > 0 && isset($this->rows[$y - 1]) && isset($this->rows[$y - 1][$x])) {
                         $prev_cell_value = $this->rows[$y - 1][$x];
                     }
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
