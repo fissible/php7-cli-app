@@ -167,7 +167,10 @@ class Table
                 $this->printChar('left');
                 foreach ($headers as $x => $_header) {
                     $width = $cellWidths[$x];
-                    $prev_cell_value = isset($row[$x - 1]) ? $row[$x - 1] : null;
+                    $prev_cell_value = null;
+                    if (isset($this->rows[$y - 1])) {
+                        $prev_cell_value = $this->rows[$y - 1][$x];
+                    }
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
                     if ($cell_value === $prev_cell_value) {
                         $cell_value = '--';
