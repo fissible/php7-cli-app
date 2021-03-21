@@ -172,7 +172,7 @@ class Table
                         $prev_cell_value = $this->rows[$y - 1][$x];
                     }
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
-                    if ($cell_value === $prev_cell_value) {
+                    if (isset($row[$x]) && $cell_value === $prev_cell_value) {
                         $cell_value = '--';
                     }
                     $this->buffer->print(str_pad(' ' . $cell_value, $width));
