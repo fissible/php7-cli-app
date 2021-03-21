@@ -103,6 +103,11 @@ class Output
         return $this->buffer;
     }
 
+    public static function clearLine()
+    {
+        return system('tput el');
+    }
+
     public static function color($input, $color, $background_color = false)
     {
         $out = "";
