@@ -8,6 +8,8 @@ class Table
 
     private array $headers;
 
+    private $maskDuplicateRowValues = false;
+
     private array $rows;
 
     private array $options = [
@@ -172,9 +174,12 @@ class Table
                         $prev_cell_value = $this->rows[$y - 1][$x];
                     }
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
-                    // if (isset($row[$x]) && $row[$x] === $prev_cell_value) {
-                    //     $cell_value = '--';
-                    // }
+
+                    if ($this->maskDuplicateRowValues) {
+                        if (isset($row[$x]) && $row[$x] === $prev_cell_value) {
+                            $cell_value = '--';
+                        }
+                    }
                     $this->buffer->print(str_pad(' ' . $cell_value, $width));
 
                     if ($x < ($cols - 1)) {
@@ -204,6 +209,11 @@ class Table
         $this->printChar('bottom-right', true);
 
         return $this->buffer->flush();
+    }
+
+    public function setMaskDuplicateRowValues(bool $value)
+    {
+        $this->maskDuplicateRowValues = $value;
     }
 
     public function width()
