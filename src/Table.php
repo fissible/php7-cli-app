@@ -40,6 +40,33 @@ class Table
         $this->setOptions($options);
     }
 
+    public static function borderPreset(string $preset): array
+    {
+        switch ($preset) {
+            case 'none':
+                return [
+                    'chars' => [
+                        'top' => '',
+                        'top-mid' => '',
+                        'top-left' => '',
+                        'top-right' => '',
+                        'bottom' => '',
+                        'bottom-mid' => '',
+                        'bottom-left' => '',
+                        'bottom-right' => '',
+                        'left' => '',
+                        'left-mid' => '',
+                        'mid' => '',
+                        'mid-mid' => '',
+                        'right' => '',
+                        'right-mid' => '',
+                        'middle' => ''
+                    ]
+                ];
+            break;
+        }
+    }
+
     /**
      * Print the table to the output
      */
@@ -90,70 +117,84 @@ class Table
         $innerLength = array_sum($cellWidths) + count($cellWidths) - 1;
 
         // print top border
-        $this->buffer->print($this->options['chars']['top-left']);
-        foreach ($headers as $x => $header) {
-            $width = $cellWidths[$x];
-            $this->buffer->print(str_repeat($this->options['chars']['top'], $width));
-            if ($x < ($cols - 1)) {
-                $this->buffer->print($this->options['chars']['top-mid']);
+        $this->printChar('top-left');
+
+        $char_top = $this->getChar('top');
+        $char_top_mid = $this->getChar('top-mid');
+        if ($char_top || $char_top_mid) {
+            foreach ($headers as $x => $header) {
+                $width = $cellWidths[$x];
+                if ($char_top) {
+                    $this->buffer->print(str_repeat($char_top, $width));
+                }
+                if ($x < ($cols - 1) && $char_top_mid) {
+                    $this->buffer->print($char_top_mid);
+                }
             }
         }
-        $this->buffer->printl($this->options['chars']['top-right']);
+
+        $this->printChar('top-right', true);
 
         if ($printHeaders) {
             // print headers: widths + count + 1
-            $this->buffer->print($this->options['chars']['left']);
+
+            $this->printChar('left');
             foreach ($headers as $x => $header) {
                 $width = $cellWidths[$x];
                 $this->buffer->print(str_pad(' ' . $header, $width));
                 if ($x < ($cols - 1)) {
-                    $this->buffer->print($this->options['chars']['middle']);
+                    $this->printChar('middle');
                 }
             }
-            $this->buffer->printl($this->options['chars']['right']);
+            $this->printChar('right', true);
 
             // print header/body divider
-            $this->buffer->print($this->options['chars']['left-mid']);
+            $this->printChar('left-mid');
             foreach ($headers as $x => $header) {
                 $width = $cellWidths[$x];
-                $this->buffer->print(str_repeat($this->options['chars']['mid'], $width));
+                if ($char = $this->getChar('mid')) {
+                    $this->buffer->print(str_repeat($char, $width));
+                }
                 if ($x < ($cols - 1)) {
-                    $this->buffer->print($this->options['chars']['mid-mid']);
+                    $this->printChar('mid-mid');
                 }
             }
-            $this->buffer->printl($this->options['chars']['right-mid']);
+            $this->printChar('right-mid', true);
         }
 
         if ($rowCount) {
             foreach ($this->rows as $y => $row) {
-                $this->buffer->print($this->options['chars']['left']);
+                $this->printChar('left');
                 foreach ($headers as $x => $_header) {
                     $width = $cellWidths[$x];
-                    $this->buffer->print(str_pad(' ' . $row[$x], $width));
-                    
+                    $cell_value = isset($row[$x]) ? $row[$x] : '';
+                    $this->buffer->print(str_pad(' ' . $cell_value, $width));
+
                     if ($x < ($cols - 1)) {
-                        $this->buffer->print($this->options['chars']['middle']);
+                        $this->printChar('middle');
                     }
                 }
-                $this->buffer->printl($this->options['chars']['right']);
+                $this->printChar('right', true);
             }
 
         } else {
-            $this->buffer->print($this->options['chars']['left']);
+            $this->printChar('left');
             $this->buffer->print(str_pad($this->options['no-data-string'], $innerLength, ' ', STR_PAD_BOTH));
-            $this->buffer->printl($this->options['chars']['right']);
+            $this->printChar('right', true);
         }
 
         // Print bottom border
-        $this->buffer->print($this->options['chars']['bottom-left']);
+        $this->printChar('bottom-left');
         foreach ($headers as $x => $header) {
             $width = $cellWidths[$x];
-            $this->buffer->print(str_repeat($this->options['chars']['bottom'], $width));
+            if ($char = $this->getChar('bottom')) {
+                $this->buffer->print(str_repeat($char, $width));
+            }
             if ($x < ($cols - 1)) {
-                $this->buffer->print($this->options['chars']['bottom-mid']);
+                $this->printChar('bottom-mid');
             }
         }
-        $this->buffer->printl($this->options['chars']['bottom-right']);
+        $this->printChar('bottom-right', true);
 
         return $this->buffer->flush();
     }
@@ -162,6 +203,27 @@ class Table
     {
         $cellWidths = $this->cellWidths();
         return array_sum($cellWidths) + count($cellWidths) - 1;
+    }
+
+    private function getChar($name): ?string
+    {
+        if (isset($this->options['chars'][$name]) && !empty($this->options['chars'][$name])) {
+            return $this->options['chars'][$name];
+        }
+        return null;
+    }
+
+    private function printChar($name, bool $newline = false): void
+    {
+        if ($char = $this->getChar($name)) {
+            if ($newline) {
+                $this->buffer->printl($char);
+            } else {
+                $this->buffer->print($char);
+            }
+        } elseif ($newline) {
+            $this->buffer->printl('');
+        }
     }
 
     private function cellWidths(): array
@@ -203,7 +265,15 @@ class Table
      */
     private function setOptions(array $options)
     {
-        $this->options = array_merge_recursive($this->options, $options);
+        foreach ($options as $key => $value) {
+            if (is_array($value)) {
+                foreach ($value as $_key => $_value) {
+                    $this->options[$key][$_key] = $_value;
+                }
+            } else {
+                $this->options[$key] = $value;
+            }
+        }
         return $this;
     }
 }

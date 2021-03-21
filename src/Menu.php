@@ -14,7 +14,7 @@ class Menu
 
     private bool $returnValue = false;
 
-    public function __construct(Application $Application, array $items = [], ?string $prompt = 'Choose: ', ?string $label = null)
+    public function __construct(Application $Application, array $items = [], ?string $prompt = null, ?string $label = null)
     {
         $this->Application = $Application;
 
@@ -26,6 +26,8 @@ class Menu
         
         if ($prompt) {
             $this->prompt = $prompt;
+        } else {
+            $this->prompt = 'Choose: ';
         }
     }
 
@@ -147,7 +149,7 @@ class Menu
                 }, array_keys($row), $row);
             }
 
-            $this->Application->table(array_fill(0, count($items), ' '), $rows)->print();
+            $this->Application->table([], $rows, Table::borderPreset('none'))->print();
         } else {
             foreach ($items as $command => $description) {
                 $this->Application->output->linef(' [%s] %s', $command, $description);
