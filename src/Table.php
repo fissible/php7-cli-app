@@ -214,6 +214,7 @@ class Table
     public function setMaskDuplicateRowValues(bool $value)
     {
         $this->maskDuplicateRowValues = $value;
+        return $this;
     }
 
     public function width()
