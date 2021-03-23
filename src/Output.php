@@ -2,8 +2,12 @@
 
 namespace PhpCli;
 
+use PhpCli\Traits\RequiresBinary;
+
 class Output
 {
+    use RequiresBinary;
+
     protected static $allow_unicode;
 
     protected static $variant;
@@ -103,8 +107,15 @@ class Output
         return $this->buffer;
     }
 
-    public static function clearLine()
+    /**
+     * @param int $moveUp
+     */
+    public static function clearLine(int $moveUp = 0)
     {
+        self::requireBinary('tput');
+        if ($moveUp) {
+            Cursor::moveUp($moveUp);
+        }
         return system('tput el');
     }
 
@@ -235,6 +246,8 @@ class Output
      */
     public static function cols()
     {
+        return static::rtput('cols');
+        self::requireBinary('tput');
         return exec('tput cols');
     }
 
@@ -243,6 +256,8 @@ class Output
      */
     public static function rows()
     {
+        return static::rtput('lines');
+        self::requireBinary('tput');
         return exec('tput lines');
     }
 
@@ -386,5 +401,17 @@ class Output
     public static function variant()
     {
         return static::$variant;
+    }
+    
+    private static function rtput($command)
+    {
+        self::requireBinary('tput');
+        return exec(sprintf('tput %s', $command));
+    }
+
+    private static function tput($command)
+    {
+        self::requireBinary('tput');
+        return system(sprintf('tput %s', $command));
     }
 }

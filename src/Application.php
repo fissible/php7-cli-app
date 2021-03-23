@@ -4,6 +4,7 @@ namespace PhpCli;
 
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
+use PhpCli\Traits\RequiresBinary;
 
 /**
  * Application class
@@ -19,9 +20,13 @@ use PhpCli\Events\Event;
  */
 class Application
 {
+    use RequiresBinary;
+
     public Parameters $Parameters;
 
     public Output $output;
+
+    public bool $screen = false;
 
     public const MAIN_MENU = '__main_menu';
 
@@ -40,8 +45,6 @@ class Application
     private $return;
 
     private int $returnCode = 0;
-
-    public bool $screen = false;
 
     const MAIN_MENU_NAME = 'commands';
  
@@ -722,23 +725,6 @@ class Application
         }
 
         return $content;
-    }
-
-    public static function binaryInstalled(string $name, string $binary = null)
-    {
-        if (is_null($binary)) $binary = $name;
-        if (!`which ${binary}`) {
-            return false;
-        }
-        return true;
-    }
-
-    public static function requireBinary(string $name, string $binary = null)
-    {
-        if (is_null($binary)) $binary = $name;
-        if (!`which ${binary}`) {
-            throw new \RuntimeException(sprintf('Error: %s is not installed.', $name));
-        }
     }
 
     public function __get($name)
