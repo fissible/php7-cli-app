@@ -22,6 +22,11 @@ class File {
         return chmod($this->path, $mode);
     }
 
+    public function delete(): bool
+    {
+        return unlink($this->path);
+    }
+
     public function exists()
     {
         return file_exists($this->path);
@@ -135,6 +140,15 @@ class File {
         });
 
         return array_values($results);
+    }
+
+    public function read(bool $asArray)
+    {
+        if ($asArray) {
+            return file($this->path, FILE_IGNORE_NEW_LINES);
+        } else {
+            return file_get_contents($this->path);
+        }
     }
 
     /**

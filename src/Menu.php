@@ -71,16 +71,15 @@ class Menu
             $input--;
         }
 
-        try {
-            if (!$this->returnValue && $this->hasKey($input)) {
-                return $input;
-            }
-            return $this->getValue($input);
-        } catch (\InvalidArgumentException $e) {
-            //
+        if (!$this->hasKey($input)) {
+            return null;
         }
 
-        return null;
+        if ($this->returnValue) {
+            return $this->getValue($input);
+        }
+
+        return $input;
     }
 
     /**

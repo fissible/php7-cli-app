@@ -21,6 +21,7 @@ class Input
 
             // "enter value"        -> "enter value [default]" -- append default value
             // "enter value [N/A]"  -> "enter value [N/A]"     -- leave as-is
+            // If the prompt does not end with a bracketed value.
             if (preg_match('/.*\[([^)]*)\]/', $prompt) !== 1) {
                 if (is_float($default)) {
                     if (substr($suffix, -1) === '$') {
@@ -35,7 +36,7 @@ class Input
 
             // "enter value [default]" -> "enter value [default]: "
             $prompt .= $suffix;
-            if (substr($prompt, -1) === ':') {
+            if (in_array(substr($prompt, -1), [':', '?', '>'])) {
                 $prompt .= ' ';
             }
         }

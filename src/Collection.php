@@ -222,7 +222,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function reverse()
     {
-        $this->setInternal(array_reverse($this->set));
+        $this->setInternal(array_reverse($this->set, true));
     }
 
     public function set($key, $item): void
