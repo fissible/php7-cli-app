@@ -142,7 +142,7 @@ class File {
         return array_values($results);
     }
 
-    public function read(bool $asArray)
+    public function read(bool $asArray = false)
     {
         if ($asArray) {
             return file($this->path, FILE_IGNORE_NEW_LINES);
