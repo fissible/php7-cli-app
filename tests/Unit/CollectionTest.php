@@ -271,16 +271,6 @@ final class CollectionTest extends TestCase
         $C->push('3');
     }
 
-    public function testReverse()
-    {
-        $C = new Collection([1, 2, 3, 4]);
-        $expected = [4, 3, 2, 1];
-        $C->reverse();
-        $actual = $C->toArray();
-
-        $this->assertEquals($expected, $actual);
-    }
-
     public function testSet()
     {
         $C = new Collection([1, 2]);

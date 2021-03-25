@@ -2,53 +2,188 @@
 
 namespace PhpCli\Models;
 
+use PhpCli\Database\Query;
+
 class Model
 {
     protected string $table;
 
     protected string $primaryKey = 'id';
 
-    private \PDO $db;
+    protected string $primaryKeyType = 'int';
+
+    protected array $dates = [];
+
+    protected const CREATED_FIELD = 'created_at';
+
+    protected const UPDATED_FIELD = 'updated_at';
 
     private array $attributes;
 
-    public function __construct(\PDO $db, array $attributes = [])
+    private array $dirty;
+
+    public function __construct(array $attributes = [], \PDO $db = null)
     {
-        $this->db = $db;
         $this->setAttributes($attributes);
-    }
-
-    public function setAttributes(array $attributes = [])
-    {
-        foreach ($attributes as $key => $value) {
-            $this->attributes[$key] = $value;
+        if ($db) {
+            Query::setDriver($db);
         }
     }
 
-    public function delete()
+    public static function find($id, \PDO $db = null)
     {
+        $db = static::getConnection($db);
+        $Model = new static([], $db);
+
+        $attributes = Query::table($Model->getTable())
+            ->where($Model->getPrimaryKey(), $id)
+            ->first();
+
+        return new static(get_object_vars($attributes), $db);
+    }
+
+    public static function getConnection(\PDO $db = null)
+    {
+        if (is_null($db)) {
+            $db = Query::driver();
+        }
+
+        if (!($db instanceof \PDO)) {
+            throw new \RuntimeException('No PDO instance available.');
+        }
+
+        return $db;
+    }
+
+    /**
+     * Get an attribute value.
+     * 
+     * @param string $name
+     * @return mixed
+     */
+    public function getAttribute(string $name)
+    {
+        $value = null;
+
+        if (isset($this->dirty[$name])) {
+            $value = $this->dirty[$name];
+        } elseif (isset($this->attributes[$name])) {
+            $value = $this->attributes[$name];
+        }
+
+        if (in_array($name, array_merge($this->dates, [self::UPDATED_FIELD, self::CREATED_FIELD]))) {
+            $value = (new \DateTime())->setTimestamp((int) $value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return string
+     */
+    public function getTable(): string
+    {
+        if (isset($this->table)) {
+            return $this->table;
+        }
+        return strtolower((new \ReflectionClass($this))->getShortName());
+    }
+
+    public function getPrimaryKey(): string
+    {
+        return $this->primaryKey ?? 'id';
+    }
+
+    /**
+     * Set an attribute.
+     * 
+     * @param string $name
+     * @param mixed $value
+     * @return self
+     */
+    public function setAttribute(string $name, $value): self
+    {
+        if (in_array($name, array_merge($this->dates, [self::UPDATED_FIELD, self::CREATED_FIELD])) && $value instanceof \DateTime) {
+            $value = $value->getTimestamp();
+        }
+
         if (!$this->exists()) {
-            throw new \LogicException('Cannot delete nonexistent model');
+            $this->attributes[$name] = $value;
+        } else {
+            if ($this->attributes[$name] !== $value) {
+                $this->dirty[$name] = $value;
+            } else {
+                unset($this->dirty[$name]);
+            }
         }
-        $sql = sprintf("DELETE FROM `%s` WHERE %s=? LIMIT 1", $this->table, $this->primaryKey);
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([$this->primaryKey()]);
+        return $this;
     }
 
-    public function exists()
+    /**
+     * Delete the record.
+     * 
+     * @return bool
+     */
+    public function delete(): bool
+    {
+        static::getConnection();
+
+        return Query::table($this->getTable())
+            ->where($this->primaryKey, $this->primaryKey())
+            ->delete();
+    }
+
+    /**
+     * Check if the primary key is set (implying the record is persisted).
+     * 
+     * @return bool
+     */
+    public function exists(): bool
     {
         if (empty($this->attributes)) return false;
 
         return isset($this->attributes[$this->primaryKey]);
     }
 
-    public function find($id)
+    public function hasAttribute(string $name): bool
     {
-        $stmt = $this->db->prepare(sprintf("SELECT * FROM %s WHERE %s=?", $this->table, $this->primaryKey));
-        $stmt->execute([$id]); 
-        $attributes = $stmt->fetch();
+        return (isset($this->dirty[$name]) || isset($this->attributes[$name]));
+    }
 
-        return new static($this->db, $attributes);
+    /**
+     * Check if any fields have been updated in memory.
+     * 
+     * @return bool
+     */
+    public function isDirty(): bool
+    {
+        return !empty($this->dirty);
+    }
+
+    public function insert(array $data = []): bool
+    {
+        static::getConnection();
+
+        if (empty($data)) {
+            $data = $this->attributes;
+            unset($data[$this->primaryKey]);
+        }
+
+        if (isset($data[$this->primaryKey])) {
+            throw new \InvalidArgumentException('Data includes primary key value.');
+        }
+
+        if ($id = Query::table($this->getTable())->insert($data)) {
+            if ($this->primaryKeyType === 'int') {
+                $id = intval($id);
+            }
+            $this->attributes[$this->primaryKey] = $id;
+            $this->refresh();
+
+            return true;
+        }
+
+        return false;
     }
 
     public function primaryKey()
@@ -59,57 +194,61 @@ class Model
         return null;
     }
 
-    public function insert(array $data)
+    public function refresh()
     {
-        if (isset($data[$this->primaryKey])) {
-            throw new \InvalidArgumentException('Data includes primary key value.');
+        static::getConnection();
+
+        if (!$this->exists()) {
+            throw new \LogicException('Cannot refresh nonexistent model.');
         }
 
-        $sql = sprintf("INSERT INTO %s (", $this->table);
-        foreach ($data as $key => $val) {
-            $sql .= sprintf(" %s,", $key);
-        }
-        $sql = ltrim(rtrim($sql, ','));
-        $sql .= ') VALUES (';
-        foreach ($data as $key => $val) {
-            $sql .= sprintf(" :%s,", $key);
-        }
-        $sql = ltrim(rtrim($sql, ','));
-        $sql .= ')';
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($data);
-        $id = $this->db->lastInsertId();
+        $attributes = Query::table($this->getTable())
+            ->where($this->primaryKey, $this->primaryKey())
+            ->first();
 
-        return $this->find($id);
+        $this->setAttributes(get_object_vars($attributes));
+
+        return $this;
     }
 
     public function save()
     {
-        $attributes = $this->attributes;
-        unset($attributes[$this->primaryKey]);
-        
         if ($this->exists()) {
-            return $this->update($attributes);
+            return $this->update();
         } else {
-            return $this->insert($attributes);
+            return $this->insert();
         }
     }
 
-    public function update(array $data): bool
+    public function update(array $data = []): bool
     {
-        if (isset($data[$this->primaryKey])) {
-            throw new \InvalidArgumentException('Data includes primary key value.');
+        static::getConnection();
+
+        if (!$this->isDirty()) {
+            return true;
+        }
+        if (!empty($data)) {
+            foreach ($data as $key => $val) {
+                if ($this->attributes[$key] !== $val) {
+                    $this->dirty[$key] = $val;
+                }
+            }
         }
 
+        $data = $this->dirty;
         $data[$this->primaryKey] = $this->primaryKey();
-        $sql = sprintf("UPDATE %s SET", $this->table);
-        foreach ($data as $key => $val) {
-            $sql .= sprintf(" %s=:%s,", $key, $key);
+
+        if (array_key_exists(self::UPDATED_FIELD, $this->attributes)) {
+            unset($data[self::UPDATED_FIELD]);
         }
-        $sql = rtrim($sql, ',');
-        $sql .= sprintf(" WHERE %s=:%s", $this->primaryKey, $this->primaryKey);
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute($data);
+
+        if (Query::table($this->getTable())->update($data, self::UPDATED_FIELD)) {
+            $this->refresh();
+
+            return true;
+        }
+
+        return false;
     }
 
     public function __get(string $name)
@@ -119,27 +258,17 @@ class Model
         if (method_exists($this, $method)) {
             return call_user_func([$this, $method]);
         }
-
-        if (isset($this->attributes[$name])) {
-            return $this->attributes[$name];
-        }
         
-        return null;
+        return $this->getAttribute($name);
     }
 
     public function __isset(string $name): bool
     {
-        if (isset($this->attributes[$name])) {
+        if ($this->hasAttribute($name)) {
             return true;
         }
 
-        $method = $this->attributeGetter($name);
-
-        if (method_exists($this, $method)) {
-            return true;
-        }
-
-        return false;
+        return method_exists($this, $this->attributeGetter($name));
     }
 
     public function __set(string $name, $value)
@@ -150,7 +279,16 @@ class Model
             return call_user_func([$this, $method], $value);
         }
 
-        $this->attributes[$name] = $value;
+        $this->setAttribute($name, $value);
+    }
+
+    /**
+     * Set the attributes array.
+     */
+    protected function setAttributes(array $attributes = [])
+    {
+        $this->attributes = $attributes;
+        $this->dirty = [];
     }
 
     private function attributeGetter(string $name)
