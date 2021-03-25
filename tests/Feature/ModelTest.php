@@ -11,10 +11,41 @@ final class ModelTest extends TestCase
 {
     use \Tests\UsesDatabase;
 
-    // public function setUp(): void
-    // {
-        
-    // }
+    public function testFind()
+    {
+        $db = $this->setUpDatabase();
+
+        $db->exec('CREATE TABLE IF NOT EXISTS model (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR (30) NOT NULL
+        )');
+
+        $result = Query::table('model')->insert(['name' => 'ModelFind']);
+
+        $Model = Model::find(intval($result));
+
+        $this->assertEquals('ModelFind', $Model->name);
+
+        $this->tearDownDatabase();
+    }
+
+    public function testWhere()
+    {
+        $db = $this->setUpDatabase();
+
+        $db->exec('CREATE TABLE IF NOT EXISTS model (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR (30) NOT NULL
+        )');
+
+        $result = Query::table('model')->insert(['name' => 'ModelFind']);
+
+        $Model = Model::where('name', 'ModelFind')->first();
+
+        $this->assertEquals((int) $result, $Model->id);
+
+        $this->tearDownDatabase();
+    }
 
     public function testGetAttribute()
     {
@@ -80,24 +111,6 @@ final class ModelTest extends TestCase
         $Model = Model::find(intval($result));
 
         $this->assertTrue($Model->exists());
-
-        $this->tearDownDatabase();
-    }
-
-    public function testFind()
-    {
-        $db = $this->setUpDatabase();
-
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
-            id INTEGER PRIMARY KEY,
-            name VARCHAR (30) NOT NULL
-        )');
-
-        $result = Query::table('model')->insert(['name' => 'ModelFind']);
-
-        $Model = Model::find(intval($result));
-
-        $this->assertEquals('ModelFind', $Model->name);
 
         $this->tearDownDatabase();
     }

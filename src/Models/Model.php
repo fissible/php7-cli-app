@@ -6,11 +6,11 @@ use PhpCli\Database\Query;
 
 class Model
 {
-    protected string $table;
+    protected static string $table;
 
-    protected string $primaryKey = 'id';
+    protected static string $primaryKey = 'id';
 
-    protected string $primaryKeyType = 'int';
+    protected static string $primaryKeyType = 'int';
 
     protected array $dates = [];
 
@@ -30,16 +30,11 @@ class Model
         }
     }
 
-    public static function find($id, \PDO $db = null)
+    public static function find($id)
     {
-        $db = static::getConnection($db);
-        $Model = new static([], $db);
+        static::getConnection();
 
-        $attributes = Query::table($Model->getTable())
-            ->where($Model->getPrimaryKey(), $id)
-            ->first();
-
-        return new static(get_object_vars($attributes), $db);
+        return static::where(static::getPrimaryKey(), $id)->first();
     }
 
     public static function getConnection(\PDO $db = null)
@@ -53,6 +48,18 @@ class Model
         }
 
         return $db;
+    }
+
+    public static function where()
+    {
+        $args = func_get_args();
+        static::getConnection();
+
+        $results = Query::table(static::getTable())->where(...$args)->get();
+
+        return $results->map(function ($attributes) {
+            return new static(get_object_vars($attributes));
+        });
     }
 
     /**
@@ -81,17 +88,17 @@ class Model
     /**
      * @return string
      */
-    public function getTable(): string
+    public static function getTable(): string
     {
-        if (isset($this->table)) {
-            return $this->table;
+        if (isset(static::$table)) {
+            return static::$table;
         }
-        return strtolower((new \ReflectionClass($this))->getShortName());
+        return strtolower((new \ReflectionClass(new static))->getShortName());
     }
 
-    public function getPrimaryKey(): string
+    public static function getPrimaryKey(): string
     {
-        return $this->primaryKey ?? 'id';
+        return static::$primaryKey ?? 'id';
     }
 
     /**
@@ -128,8 +135,8 @@ class Model
     {
         static::getConnection();
 
-        return Query::table($this->getTable())
-            ->where($this->primaryKey, $this->primaryKey())
+        return Query::table(static::getTable())
+            ->where(static::$primaryKey, $this->primaryKey())
             ->delete();
     }
 
@@ -142,7 +149,7 @@ class Model
     {
         if (empty($this->attributes)) return false;
 
-        return isset($this->attributes[$this->primaryKey]);
+        return isset($this->attributes[static::$primaryKey]);
     }
 
     public function hasAttribute(string $name): bool
@@ -166,18 +173,18 @@ class Model
 
         if (empty($data)) {
             $data = $this->attributes;
-            unset($data[$this->primaryKey]);
+            unset($data[static::$primaryKey]);
         }
 
-        if (isset($data[$this->primaryKey])) {
+        if (isset($data[static::$primaryKey])) {
             throw new \InvalidArgumentException('Data includes primary key value.');
         }
 
-        if ($id = Query::table($this->getTable())->insert($data)) {
-            if ($this->primaryKeyType === 'int') {
+        if ($id = Query::table(static::getTable())->insert($data)) {
+            if (static::$primaryKeyType === 'int') {
                 $id = intval($id);
             }
-            $this->attributes[$this->primaryKey] = $id;
+            $this->attributes[static::$primaryKey] = $id;
             $this->refresh();
 
             return true;
@@ -189,7 +196,7 @@ class Model
     public function primaryKey()
     {
         if ($this->exists()) {
-            return $this->attributes[$this->primaryKey];
+            return $this->attributes[static::$primaryKey];
         }
         return null;
     }
@@ -202,8 +209,8 @@ class Model
             throw new \LogicException('Cannot refresh nonexistent model.');
         }
 
-        $attributes = Query::table($this->getTable())
-            ->where($this->primaryKey, $this->primaryKey())
+        $attributes = Query::table(static::getTable())
+            ->where(static::$primaryKey, $this->primaryKey())
             ->first();
 
         $this->setAttributes(get_object_vars($attributes));
@@ -236,13 +243,13 @@ class Model
         }
 
         $data = $this->dirty;
-        $data[$this->primaryKey] = $this->primaryKey();
+        $data[static::$primaryKey] = $this->primaryKey();
 
         if (array_key_exists(self::UPDATED_FIELD, $this->attributes)) {
             unset($data[self::UPDATED_FIELD]);
         }
 
-        if (Query::table($this->getTable())->update($data, self::UPDATED_FIELD)) {
+        if (Query::table(static::getTable())->update($data, self::UPDATED_FIELD)) {
             $this->refresh();
 
             return true;
