@@ -34,8 +34,23 @@ final class DatabaseTest extends TestCase
 
         $this->assertEquals('3', $result);
 
-        // var_dump(Query::table('test')->get());
+        $rows = Query::table('test')
+            ->whereIn('name', ['Second', 'Third'])
+            ->get()
+            ->column('name');
 
+        $this->assertFalse($rows->contains('First'));
+        $this->assertTrue($rows->contains('Second'));
+        $this->assertTrue($rows->contains('Third'));
+
+        $rows = Query::table('test')
+            ->whereBetween('id', [2, 3])
+            ->get()
+            ->column('name');
+
+        $this->assertFalse($rows->contains('First'));
+        $this->assertTrue($rows->contains('Second'));
+        $this->assertTrue($rows->contains('Third'));
 
         $row = Query::table('test')
             ->where('name', 'Second')

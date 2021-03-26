@@ -79,14 +79,24 @@ class Query {
             throw new \RuntimeException('No PDO driver available.');
         }
         
-        $input_parameters = null;
+        $input_parameters = [];
         if (substr($sql, 0, 6) === 'INSERT') {
             $input_parameters = $this->insert;
         } elseif (substr($sql, 0, 6) === 'UPDATE') {
             $input_parameters = $this->update;
         }
 
-        // print_r(compact('sql', 'input_parameters'));
+        // WHERE IN variables
+        $in_params = [];
+        foreach ($this->where as $conj => $whereClauses) {
+            foreach ($whereClauses as $where) {
+                if (isset($where[3]) && !empty($where[3])) {
+                    $in_params = array_merge($in_params, $where[3]);
+                }
+            }
+        }
+
+        // print_r(['sql'=>$sql, 'input_parameters'=>array_merge($input_parameters, $in_params)]);
 
         $stmt = static::$db->prepare($sql);
         if (!$stmt) {
@@ -103,10 +113,10 @@ class Query {
 
         if ($this->isMultiInsert()) {
             foreach ($this->insert as $input_parameters) {
-                $result = $stmt->execute($input_parameters);
+                $result = $stmt->execute(array_merge($input_parameters, $in_params));
             }
         } else {
-            $result = $stmt->execute($input_parameters);
+            $result = $stmt->execute(array_merge($input_parameters, $in_params));
         }
 
         static::$db->commit();
@@ -188,7 +198,7 @@ class Query {
         return property_exists($first, $column) ? $first->$column : null;
     }
 
-    public function limit (int $limit): self
+    public function limit(int $limit): self
     {
         $this->limit = $limit;
         return $this;
@@ -232,8 +242,32 @@ class Query {
         $operator = count($args) > 2 ? $args[1] : '=';
         $value = count($args) > 2 ? $args[2] : $args[1];
 
-        $this->where['AND'][] = [$column, $operator, $value];
+        $this->where['AND'][] = [$column, strtoupper($operator), $value];
 
+        return $this;
+    }
+
+    public function whereBetween(string $column, array $values, string $conjunction = 'AND')
+    {
+        $this->where[strtoupper($conjunction)][] = [$column, 'BETWEEN', $values];
+        return $this;
+    }
+
+    public function whereIn(string $column, array $values, string $conjunction = 'AND'): self
+    {
+        $this->where[strtoupper($conjunction)][] = [$column, 'IN', $values];
+        return $this;
+    }
+
+    public function whereNotBetween(string $column, array $values, string $conjunction = 'AND'): self
+    {
+        $this->where[strtoupper($conjunction)][] = [$column, 'NOT BETWEEN', $values];
+        return $this;
+    }
+
+    public function whereNotIn(string $column, array $values, string $conjunction = 'AND'): self
+    {
+        $this->where[strtoupper($conjunction)][] = [$column, 'NOT IN', $values];
         return $this;
     }
 
@@ -305,7 +339,7 @@ class Query {
         // join
 
         if ($where = $this->compileWhere()) {
-            $sql .= ' '.$where;
+            $sql .= $where;
         }
 
         if (isset($this->limit)) {
@@ -329,10 +363,13 @@ class Query {
         }
 
         if (!empty($this->where['AND'])) {
-            $sql .= implode(' AND ', array_map(function ($whereClause) {
-                $value = is_numeric($whereClause[2]) ? $whereClause[2] : '\''.$whereClause[2].'\'';
-                return sprintf('%s %s %s', $whereClause[0], $whereClause[1], $value);
-            }, $this->where['AND']));
+            $whereClauses = [];
+            foreach ($this->where['AND'] as $key => $where) {
+                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, 'AND', $key);
+                $this->where['AND'][$key][3] = $input_parameters;
+                $whereClauses[] = $whereSql;
+            }
+            $sql .= implode(' AND ', $whereClauses);
         }
 
         if ($both) {
@@ -340,10 +377,13 @@ class Query {
         }
 
         if (!empty($this->where['OR'])) {
-            $sql .= implode(' OR ', array_map(function ($whereClause) {
-                $value = is_numeric($whereClause[2]) ? $whereClause[2] : '\''.$whereClause[2].'\'';
-                return sprintf('%s %s %s', $whereClause[0], $whereClause[1], $value);
-            }, $this->where['OR']));
+            $whereClauses = [];
+            foreach ($this->where['OR'] as $key => $where) {
+                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, 'AND', $key);
+                $this->where['OR'][$key][3] = $input_parameters;
+                $whereClauses[] = $whereSql;
+            }
+            $sql .= implode(' OR ', $whereClauses);
         }
 
         if ($both) {
@@ -355,5 +395,38 @@ class Query {
         }
 
         return $sql;
+    }
+
+    private function compileWhereCriteria(array $where, string $conjunction, int $key)
+    {
+        $param_key = $key;
+        $operator = $where[1];
+        $value = $where[2];
+        $input_parameters = [];
+        if (is_array($value)) {
+            if (in_array($operator, ['IN', 'NOT IN'])) {
+                $in = '';
+                foreach ($value as $item) {
+                    $param_key++;
+                    $key = ':'.$conjunction.$param_key;
+                    $in .= "$key,";
+                    $input_parameters[$key] = $item;
+                }
+                $value = '('.rtrim($in, ',').')';
+            } elseif($operator === 'BETWEEN') {
+                $value = array_values($value);
+                $keyFrom = $conjunction.(++$param_key);
+                $keyTo = $conjunction.(++$param_key);
+                $input_parameters[':'.$keyFrom] = $value[0];
+                $input_parameters[':'.$keyTo] = $value[1];
+                $value = sprintf(':%s AND :%s', $keyFrom, $keyTo);
+            } else {
+                throw new \InvalidArgumentException(sprintf('Invalid WHERE criteria value "%s', gettype($value)));
+            }
+        } else {
+            $value = is_numeric($value) ? $value : '\''.$value.'\'';
+        }
+        
+        return [sprintf('%s %s %s', $where[0], $where[1], $value), $input_parameters];
     }
 }
