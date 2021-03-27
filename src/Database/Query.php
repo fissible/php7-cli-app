@@ -65,7 +65,8 @@ class Query {
 
     public function count(): int
     {
-        $statement = $this->exe($this->compileQuery('COUNT'));
+        $this->type = 'COUNT';
+        $statement = $this->exe($this->compileQuery());
         if (!$statement) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
@@ -77,7 +78,8 @@ class Query {
 
     public function delete(): bool
     {
-        return $this->exe($this->compileQuery('DELETE'));
+        $this->type = 'DELETE';
+        return $this->exe($this->compileQuery());
     }
 
     public function exe(string $sql)
@@ -151,7 +153,8 @@ class Query {
 
     public function first()
     {
-        $statement = $this->exe($this->compileQuery('SELECT'));
+        $this->type = 'SELECT';
+        $statement = $this->exe($this->compileQuery());
         if (!$statement) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
@@ -165,7 +168,8 @@ class Query {
 
     public function get()
     {
-        $statement = $this->exe($this->compileQuery('SELECT'));
+        $this->type = 'SELECT';
+        $statement = $this->exe($this->compileQuery());
         if (!$statement) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
@@ -184,7 +188,8 @@ class Query {
     public function insert(array $data)
     {
         $this->insert = $data;
-        return $this->exe($this->compileQuery('INSERT'));
+        $this->type = 'INSERT';
+        return $this->exe($this->compileQuery());
     }
 
     public function innerJoin(string $table, string $localKey, string $foreignKey)
@@ -222,7 +227,8 @@ class Query {
     {
         $this->update = $data;
         $this->updateField = $updateField;
-        return $this->exe($this->compileQuery('UPDATE'));
+        $this->type = 'UPDATE';
+        return $this->exe($this->compileQuery());
     }
 
     public function value(string $column)
@@ -374,7 +380,7 @@ class Query {
         );
     }
 
-    private function compileQuery(string $type = null): string
+    public function compileQuery(string $type = null): string
     {
         $input_parameters = null;
         $type = $type ?? $this->type;
@@ -442,13 +448,12 @@ class Query {
         }
 
         if (isset($this->order)) {
-            $sql .= ' ORDER BY';
+            $sql .= ' ORDER BY ';
+            $orderBys = [];
             foreach ($this->order as $key => $dir) {
-                if ($key > 0) {
-                    $sql .= ',';
-                }
-                $sql .= ' '.$key.($dir === 'DESC' ? ' DESC' : ' ASC');
+                $orderBys[] = $key.($dir === 'DESC' ? ' DESC' : ' ASC');
             }
+            $sql .= implode(', ', $orderBys);
         }
 
         if (isset($this->limit)) {
