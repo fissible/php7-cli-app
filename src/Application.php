@@ -2,6 +2,7 @@
 
 namespace PhpCli;
 
+use PhpCli\Database\Query;
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
 use PhpCli\Filesystem\File;
