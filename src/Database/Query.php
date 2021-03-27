@@ -389,7 +389,11 @@ class Query {
         $type = $type ?? $this->type;
         switch ($type) {
             case 'COUNT':
-                $sql = sprintf("SELECT COUNT(*) FROM `%s`", $this->table);
+                if (count($this->select) === 1 && $this->select[0] === '*') {
+                    $sql = sprintf("SELECT COUNT(*) FROM `%s`", $this->table);
+                } else {
+                    $sql = sprintf("SELECT  COUNT(*), %s FROM `%s`", implode(', ', $this->select), $this->table);
+                }
             break;
             case 'DELETE':
                 $sql = sprintf("DELETE FROM `%s`", $this->table);

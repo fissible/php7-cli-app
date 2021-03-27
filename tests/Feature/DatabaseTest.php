@@ -42,6 +42,7 @@ final class DatabaseTest extends TestCase
         $this->assertEquals('Second', $row->name);
 
         $count = Query::table('test')
+            ->select('name', 'color')
             ->whereIn('name', ['Second', 'Third'])
             ->count();
         
