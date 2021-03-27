@@ -65,7 +65,14 @@ class Query {
 
     public function count(): int
     {
-        return $this->exe($this->compileQuery('COUNT'));
+        $statement = $this->exe($this->compileQuery('COUNT'));
+        if (!$statement) {
+            $error = static::$db->errorInfo();
+            throw new QueryException($error[2], $error[0], $error[1]);
+        }
+        $result = $statement->fetchColumn();
+
+        return (int) $result ?? 0;
     }
 
     public function delete(): bool
