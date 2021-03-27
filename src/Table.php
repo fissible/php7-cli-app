@@ -175,7 +175,7 @@ class Table
                     }
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
 
-                    if ($this->maskDuplicateRowValues && !empty($prev_cell_value)) {
+                    if (($this->maskDuplicateRowValues === true || is_array($this->maskDuplicateRowValues) && in_array($x, $this->maskDuplicateRow)) && !empty($prev_cell_value)) {
                         if (isset($row[$x]) && $row[$x] === $prev_cell_value) {
                             $cell_value = '--';
                         }
@@ -211,7 +211,14 @@ class Table
         return $this->buffer->flush();
     }
 
-    public function setMaskDuplicateRowValues(bool $value)
+    /**
+     * Pass in true to mask all repeating values or
+     * an array of inter indexes that should mask.
+     *
+     * @param bool|array
+     * @return self
+     */
+    public function setMaskDuplicateRowValues($value): self
     {
         $this->maskDuplicateRowValues = $value;
         return $this;
