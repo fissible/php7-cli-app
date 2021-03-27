@@ -35,14 +35,24 @@ final class ModelTest extends TestCase
 
         $db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
-            name VARCHAR (30) NOT NULL
+            name VARCHAR (30) NOT NULL,
+            color VARCHAR (10) DEFAULT NULL,
+            size VARCHAR (10) DEFAULT NULL
         )');
 
         $result = Query::table('model')->insert(['name' => 'ModelFind']);
-
         $Model = Model::where('name', 'ModelFind')->first();
 
         $this->assertEquals((int) $result, $Model->id);
+
+        Query::table('model')->insert([
+            ['name' => 'First', 'color' => 'red', 'size' => 'small'],
+            ['name' => 'Second', 'color' => 'blue', 'size' => 'medium'],
+            ['name' => 'Third', 'color' => 'blue', 'size' => 'large']
+        ]);
+        $Model = Model::where('color', 'blue')->where('size', 'medium')->first();
+
+        $this->assertEquals('Second', $Model->name);
 
         $this->tearDownDatabase();
     }

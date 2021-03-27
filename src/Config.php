@@ -29,6 +29,20 @@ class Config
         return null;
     }
 
+    public function get(string $name)
+    {
+        if (false !== strpos($name, '.')) {
+            $arr = $this->data;
+            $keys = explode('.', $name);
+            foreach ($keys as $key) {
+                $arr = $arr[$key] ?? null;
+            }
+            return $arr;
+        } else {
+            return $this->data[$name];
+        }
+    }
+
     public function getFile(): ?File
     {
         if (isset($this->File)) {
@@ -41,6 +55,30 @@ class Config
     {
         $contents = json_encode($this->data, JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR, 256);
         return $this->File->write($contents);
+    }
+
+    public function set(string $name, $value)
+    {
+        if (false !== strpos($name, '.')) {
+            if (is_null($name)) {
+                return $this->data = $value;
+            }
+
+            $keys = explode('.', $name);
+            $array = &$this->data;
+            while (count($keys) > 1) {
+                $key = array_shift($keys);
+                if (! isset($array[$key]) || ! is_array($array[$key])) {
+                    $array[$key] = [];
+                }
+                $array = &$array[$key];
+            }
+            $array[array_shift($keys)] = $value;
+
+            return $array;
+        } else {
+            $this->data[$name] = $value;
+        }
     }
 
     public function setFile(string $filepath): self

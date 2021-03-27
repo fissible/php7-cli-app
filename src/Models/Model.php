@@ -13,6 +13,8 @@ class Model
     protected static string $primaryKeyType = 'int';
 
     protected array $dates = [];
+    
+    protected static $dateFormat = 'U';
 
     protected const CREATED_FIELD = 'created_at';
 
@@ -21,6 +23,8 @@ class Model
     private array $attributes;
 
     private array $dirty;
+
+    private Query $query;
 
     public function __construct(array $attributes = [], \PDO $db = null)
     {
@@ -50,15 +54,28 @@ class Model
         return $db;
     }
 
-    public static function where()
+    public static function newInstance($attributes = []): Model
     {
-        $args = func_get_args();
-        static::getConnection();
+        if (is_object($attributes)) {
+            $attributes = get_object_vars($attributes);
+        }
+        if (!is_array($attributes)) {
+            throw new \InvalidArgumentException('Models must be hyrdated with an array or object with public properties.');
+        }
+        return new static($attributes, static::getConnection());
+    }
 
-        $results = Query::table(static::getTable())->where(...$args)->get();
+    public function first()
+    {
+        return static::newInstance($this->getQuery()->first());
+    }
+
+    public function get()
+    {
+        $results = $this->getQuery()->get();
 
         return $results->map(function ($attributes) {
-            return new static(get_object_vars($attributes));
+            return static::newInstance($attributes);
         });
     }
 
@@ -78,9 +95,12 @@ class Model
             $value = $this->attributes[$name];
         }
 
-        if (in_array($name, array_merge($this->dates, [self::UPDATED_FIELD, self::CREATED_FIELD]))) {
-            $value = (new \DateTime())->setTimestamp((int) $value);
+        if (!is_null($value)) {
+            if (in_array($name, array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD]))) {
+                $value = \DateTime::createFromFormat(static::$dateFormat, $value);
+            }
         }
+        
 
         return $value;
     }
@@ -110,8 +130,8 @@ class Model
      */
     public function setAttribute(string $name, $value): self
     {
-        if (in_array($name, array_merge($this->dates, [self::UPDATED_FIELD, self::CREATED_FIELD])) && $value instanceof \DateTime) {
-            $value = $value->getTimestamp();
+        if (in_array($name, array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD])) && $value instanceof \DateTime) {
+            $value = $value->format(static::$dateFormat);
         }
 
         if (!$this->exists()) {
@@ -245,17 +265,55 @@ class Model
         $data = $this->dirty;
         $data[static::$primaryKey] = $this->primaryKey();
 
-        if (array_key_exists(self::UPDATED_FIELD, $this->attributes)) {
-            unset($data[self::UPDATED_FIELD]);
+        if (array_key_exists(static::UPDATED_FIELD, $this->attributes)) {
+            unset($data[static::UPDATED_FIELD]);
         }
 
-        if (Query::table(static::getTable())->update($data, self::UPDATED_FIELD)) {
+        if (Query::table(static::getTable())->update($data, static::UPDATED_FIELD)) {
             $this->refresh();
 
             return true;
         }
 
         return false;
+    }
+
+    private function getQuery()
+    {
+        if (!isset($this->query)) {
+            $this->query = Query::table(static::getTable());
+        }
+        return $this->query;
+    }
+
+    private static function callQuery()
+    {
+        $args = func_get_args();
+        $instance = array_shift($args);
+        $method = array_shift($args);
+
+        return call_user_func_array(array($instance->getQuery(), $method), $args);
+    }
+
+    public function __call($name, $arguments)
+    {
+        $result = static::callQuery($this, $name, ...$arguments);
+        if (!($result instanceof Query)) {
+            return $result;
+        }
+
+        return $this;
+    }
+
+    public static function __callStatic($name, $arguments)
+    {
+        $instance = static::newInstance();
+        $result = static::callQuery($instance, $name, ...$arguments);
+        if (!($result instanceof Query)) {
+            return $result;
+        }
+
+        return $instance;
     }
 
     public function __get(string $name)

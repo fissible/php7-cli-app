@@ -5,6 +5,7 @@ namespace PhpCli;
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
 use PhpCli\Traits\RequiresBinary;
+use PhpCli\Exceptions\ConfigNotFoundException;
 
 /**
  * Application class
@@ -22,6 +23,8 @@ class Application
 {
     use RequiresBinary;
 
+    public static string $configFile;
+
     public Parameters $Parameters;
 
     public Output $output;
@@ -30,7 +33,11 @@ class Application
 
     public const MAIN_MENU = '__main_menu';
 
+    protected static \PDO $db;
+
     protected Command $defaultCommand;
+
+    protected Config $Config;
 
     protected string $defaultPrompt = ' > ';
 
@@ -124,12 +131,75 @@ class Application
         return $options;
     }
 
+    protected function createTables($statements = [])
+    {
+        // execute the sql statements to create new tables
+        if (isset(static::$db)) {
+            foreach ($statements as $statement) {
+                static::$db->exec($statement);
+            }
+        }
+    }
+
+    /**
+     * Set up database connection.
+     * 
+     * @return bool
+     */
+    protected function databaseInit()
+    {
+        if (isset(static::$db)) {
+            return true;
+        }
+
+        $exists = false;
+
+        if ($path = $this->getConfigFilepath()) {
+            $this->Config = new Config($path);
+            $driver = $this->Config->get('database.driver');
+
+            switch ($driver) {
+                case 'sqlite':
+
+                    if ($path = $this->Config->get('database.path')) {
+                        $DbFile = new File($path);
+                        $info = $DbFile->info();
+                        
+                        if ($info['dirname'] === '.') {
+                            $DbFile = new File(rtrim($path, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'database.sqlite');
+                        } elseif (!isset($info['extension'])) {
+                            $DbFile = new File($path.'.sqlite');
+                        }
+
+                        $exists = $DbFile->exists();
+                        static::$db = new \PDO(sprintf('sqlite:%s', $DbFile->getPath()), '', '', array(
+                            \PDO::ATTR_EMULATE_PREPARES => false,
+                            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC
+                        ));
+                    } else {
+                        throw new \InvalidArgumentException('Database configuration path ("database.path") not set.');
+                    }
+
+                break;
+            }
+
+            if (isset(static::$db)) {
+                Query::setDriver(static::$db);
+            }
+        }
+
+        return $exists;
+    }
+
     /**
      * Do initial application-specific setup.
      */
     protected function init(): void
     {
-        //
+        if (!$this->databaseInit()) {
+            $this->createTables();
+        }
     }
 
     public function bind(string $name, $action)
@@ -774,6 +844,21 @@ class Application
         $Parameters = new Parameters($Options, $Arguments);
 
         return $Parameters;
+    }
+
+    private function getConfigFilepath(): ?string
+    {
+        if (isset(static::$configFile)) {
+            $file = static::$configFile;
+            if (!file_exists($file)) {
+                $file = __DIR__.DIRECTORY_SEPARATOR.$file;
+            }
+            if (file_exists($file)) {
+                return $file;
+            }
+            throw new ConfigNotFoundException(static::$configFile);
+        }
+        return null;
     }
 
     public function __destruct()

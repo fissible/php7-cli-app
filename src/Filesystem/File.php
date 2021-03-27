@@ -81,6 +81,11 @@ class File {
         return $this->path;
     }
 
+    public function info(): array
+    {
+        return $this->info;
+    }
+
     public function isDir(): bool
     {
         return is_dir($this->path);
