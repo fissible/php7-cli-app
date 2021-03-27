@@ -13,6 +13,8 @@ class Query {
 
     protected array $insert;
 
+    protected array $join = [];
+
     protected int $limit;
 
     protected int $offset;
@@ -178,6 +180,32 @@ class Query {
         return $this->exe($this->compileQuery('INSERT'));
     }
 
+    public function innerJoin(string $table, string $localKey, string $foreignKey)
+    {
+        return $this->join($table, $localKey, $foreignKey, $type = 'INNER');
+    }
+
+    public function join(string $table, string $localKey, string $foreignKey, $type = 'INNER'): self
+    {
+        $this->join[] = [$type, $table, $localKey, $foreignKey];
+        return $this;
+    }
+
+    public function leftJoin(string $table, string $localKey, string $foreignKey)
+    {
+        return $this->join($table, $localKey, $foreignKey, $type = 'LEFT');
+    }
+
+    public function outerJoin(string $table, string $localKey, string $foreignKey)
+    {
+        return $this->join($table, $localKey, $foreignKey, $type = 'OUTER');
+    }
+
+    public function rightJoin(string $table, string $localKey, string $foreignKey)
+    {
+        return $this->join($table, $localKey, $foreignKey, $type = 'RIGHT');
+    }
+
     /**
      * @param array $data
      * @param string|null $updateField
@@ -331,6 +359,14 @@ class Query {
         return false;
     }
 
+    private function compileJoin(array $join)
+    {
+        return sprintf(
+            '%s JOIN %s ON %s = %s',
+            $join[0], $join[1], $join[2], $join[3]
+        );
+    }
+
     private function compileQuery(string $type = null): string
     {
         $input_parameters = null;
@@ -388,7 +424,11 @@ class Query {
             break;
         }
 
-        // join
+        if (!empty($this->join)) {
+            foreach ($this->join as $join) {
+                $sql .= ' '.$this->compileJoin($join);
+            }
+        }
 
         if ($where = $this->compileWhere()) {
             $sql .= ' WHERE '.$where;
