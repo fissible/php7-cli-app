@@ -176,8 +176,8 @@ class Table
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
 
                     if (($this->maskDuplicateRowValues === true || is_array($this->maskDuplicateRowValues) && in_array($x, $this->maskDuplicateRowValues)) && !empty($prev_cell_value)) {
-                        if (isset($row[$x]) && $row[$x] === $prev_cell_value) {
-                            $cell_value = '--';
+                        if (isset($row[$x]) && $row[$x] === $prev_cell_value && strlen($cell_value) > 7) {
+                            $cell_value = trim(substr($cell_value, 0, 5)).'...';
                         }
                     }
                     $this->buffer->print(str_pad(' ' . $cell_value, $width));
