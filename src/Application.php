@@ -109,33 +109,18 @@ class Application
 
     protected function completionCallback($input, $index): array
     {
-        // print "\ninput: ".$input."\nindex: ".var_export($index, true)."\n";
-        /*
-            input: ba
-            index: 0
-        */
-        // var_dump(readline_info());
-        /*
-            array(6) {
-                'line_buffer' => string(4) "ba6
-                "
-                'point' => int(2)  // the current position of the cursor in the buffer
-                'end' => int(2)    // the position of the last character in the buffer
-                'library_version' => string(16) "EditLine wrapper"
-                'readline_name' => string(0) ""
-                'attempted_completion_over' => int(0)
-            }
-        */
-        $options = $this->Router->getRoutes()->map(function (Route $Route) {
+        return $this->Router->getRoutes()->map(function (Route $Route) {
             return $Route->getName();
         })->toArray();
-
-        return $options;
     }
 
+    /**
+     * Execute the sql statements to create new tables.
+     * 
+     * @param array
+     */
     protected function createTables($statements = [])
     {
-        // execute the sql statements to create new tables
         if (isset(static::$db)) {
             foreach ($statements as $statement) {
                 static::$db->exec($statement);
@@ -148,7 +133,7 @@ class Application
      * 
      * @return bool
      */
-    protected function databaseInit()
+    protected function databaseInit(): bool
     {
         if (isset(static::$db)) {
             return true;
@@ -162,13 +147,12 @@ class Application
 
             switch ($driver) {
                 case 'sqlite':
-
                     if ($path = $this->Config->get('database.path')) {
                         $DbFile = new File($path);
                         $info = $DbFile->info();
                         
                         if ($info['dirname'] === '.') {
-                            $DbFile = new File(rtrim($path, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'database.sqlite');
+                            $DbFile = new File(rtrim($path, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'database.sqlite3');
                         } elseif (!isset($info['extension'])) {
                             $DbFile = new File($path.'.sqlite');
                         }
@@ -182,7 +166,6 @@ class Application
                     } else {
                         throw new \InvalidArgumentException('Database configuration path ("database.path") not set.');
                     }
-
                 break;
             }
 
@@ -257,7 +240,8 @@ class Application
         return $this->return ?? $this->returnCode;
     }
 
-    public function mainMenu() {
+    public function mainMenu()
+    {
         if ($this->hasMenu(self::MAIN_MENU_NAME)) {
             if ($this->screen) {
                 $this->clear();
@@ -370,7 +354,7 @@ class Application
      * @param string|null $label
      * @return $this
      */
-    public function defineMainMenu(array $items, string $prompt = 'Choose: ', ?string $label = null)
+    public function defineMainMenu(array $items, string $prompt = 'Choose: ', ?string $label = null): self
     {
         return $this->defineMenu(self::MAIN_MENU_NAME, $items, $prompt, $label);
     }
@@ -589,7 +573,7 @@ class Application
      * 
      * @return string|null
      */
-    public function last()
+    public function last(): ?string
     {
         return $this->input ?? null;
     }
@@ -619,7 +603,7 @@ class Application
      * @param string|null $title
      * @return Menu
      */
-    public function menu($nameOrOptions, string $title = null, string $prompt = null, string $label = null)
+    public function menu($nameOrOptions, string $title = null, string $prompt = null, string $label = null): Menu
     {
         if (is_array($nameOrOptions)) {
             $Menu = new Menu($this, $nameOrOptions, $prompt, $label);
@@ -648,7 +632,7 @@ class Application
      * @param bool $returnValue
      * @return string|null
      */
-    public function menuPrompt($nameOrOptions, string $prompt = null, string $title = null, bool $returnValue = false)
+    public function menuPrompt($nameOrOptions, string $prompt = null, string $title = null, bool $returnValue = false): ?string
     {
         $Menu = $this->menu($nameOrOptions, $title);
         $Menu->setReturnValue($returnValue);
@@ -750,7 +734,7 @@ class Application
      * @param array $options
      * @return Table
      */
-    public function table(array $headers = [], array $rows = [], array $options = [])
+    public function table(array $headers = [], array $rows = [], array $options = []): Table
     {
         return new Table($this, $headers, $rows, $options);
     }
@@ -759,7 +743,7 @@ class Application
      * @param string $content
      * @return string
      */
-    public function textEditor(string $content = '', string $comment = null)
+    public function textEditor(string $content = '', string $comment = null): string
     {
         $binary = 'vim';
         if (!self::binaryInstalled($binary)) {
