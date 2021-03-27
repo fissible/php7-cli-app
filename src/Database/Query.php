@@ -101,19 +101,22 @@ class Query {
         // print_r(['sql'=>$sql, 'input_parameters'=>array_merge($input_parameters, $where_params)]);
 
         static::$db->beginTransaction();
-
-        if ($this->isMultiInsert()) {
-            foreach ($this->insert as $input_parameters) {
+        try {
+            if ($this->isMultiInsert()) {
+                foreach ($this->insert as $input_parameters) {
+                    $parameters = array_merge($input_parameters, $where_params);
+                    $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
+                    $result = $stmt->execute();
+                }
+            } else {
                 $parameters = array_merge($input_parameters, $where_params);
                 $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
                 $result = $stmt->execute();
             }
-        } else {
-            $parameters = array_merge($input_parameters, $where_params);
-            $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
-            $result = $stmt->execute();
+        } catch (\Throwable $e) {
+            static::$db->rollBack();
+            throw $e;
         }
-
         static::$db->commit();
 
         if (substr($sql, 0, 6) === 'SELECT') {
@@ -451,7 +454,7 @@ class Query {
             $sql .= ' ORDER BY ';
             $orderBys = [];
             foreach ($this->order as $key => $dir) {
-                $orderBys[] = $key.($dir === 'DESC' ? ' DESC' : ' ASC');
+                $orderBys[] = '`'.$key.'`'.($dir === 'DESC' ? ' DESC' : ' ASC');
             }
             $sql .= implode(', ', $orderBys);
         }
