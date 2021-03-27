@@ -3,6 +3,7 @@
 namespace PhpCli\Database;
 
 use PhpCli\Collection;
+use PhpCli\Exceptions\QueryException;
 
 class Query {
 
@@ -26,10 +27,7 @@ class Query {
 
     protected string $updateField;
 
-    protected array $where = [
-        'AND' => [],
-        'OR' => []
-    ];
+    protected array $where = [];
 
     public function __construct(\PDO $db = null)
     {
@@ -87,36 +85,22 @@ class Query {
         }
 
         // WHERE IN variables
-        $in_params = [];
-        foreach ($this->where as $conj => $whereClauses) {
-            foreach ($whereClauses as $where) {
-                if (isset($where[3]) && !empty($where[3])) {
-                    $in_params = array_merge($in_params, $where[3]);
-                }
-            }
-        }
+        $where_params = $this->getWhereParameters();
 
-        // print_r(['sql'=>$sql, 'input_parameters'=>array_merge($input_parameters, $in_params)]);
-
-        $stmt = static::$db->prepare($sql);
-        if (!$stmt) {
-            list($SQLSTATE_error_code, $driver_error_code, $error_message) = static::$db->errorInfo();
-            throw new \Exception(sprintf(
-                'SQLSTATE ERROR %s: %s - %s',
-                $SQLSTATE_error_code,
-                $driver_error_code,
-                $error_message
-            ));
-        }
+        // print_r(['sql'=>$sql, 'input_parameters'=>array_merge($input_parameters, $where_params)]);
 
         static::$db->beginTransaction();
 
         if ($this->isMultiInsert()) {
             foreach ($this->insert as $input_parameters) {
-                $result = $stmt->execute(array_merge($input_parameters, $in_params));
+                $parameters = array_merge($input_parameters, $where_params);
+                $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
+                $result = $stmt->execute();
             }
         } else {
-            $result = $stmt->execute(array_merge($input_parameters, $in_params));
+            $parameters = array_merge($input_parameters, $where_params);
+            $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
+            $result = $stmt->execute();
         }
 
         static::$db->commit();
@@ -132,17 +116,36 @@ class Query {
         return $result;
     }
 
+    private function prepareStatement(string $sql): \PDOStatement
+    {
+        $stmt = static::$db->prepare($sql);
+        if (!$stmt) {
+            $error = static::$db->errorInfo();
+            throw new QueryException($error[2], $error[0], $error[1]);
+        }
+        return $stmt;
+    }
+
+    private function bindParameters(\PDOStatement $stmt, array $input_parameters)
+    {
+        foreach ($input_parameters as $key => $value) {
+            if (is_int($value)) $param = \PDO::PARAM_INT;
+            elseif (is_bool($value)) $param = \PDO::PARAM_BOOL;
+            elseif (is_null($value)) $param = \PDO::PARAM_NULL;
+            elseif (is_string($value)) $param = \PDO::PARAM_STR;
+            else $param = FALSE;
+                
+            if ($param) $stmt->bindValue($key, $value, $param);
+        }
+        return $stmt;
+    }
+
     public function first()
     {
         $statement = $this->exe($this->compileQuery('SELECT'));
         if (!$statement) {
-            list($SQLSTATE_error_code, $driver_error_code, $error_message) = static::$db->errorInfo();
-            throw new \Exception(sprintf(
-                'SQLSTATE ERROR %s: %s - %s',
-                $SQLSTATE_error_code,
-                $driver_error_code,
-                $error_message
-            ));
+            $error = static::$db->errorInfo();
+            throw new QueryException($error[2], $error[0], $error[1]);
         }
         $result = $statement->fetch(\PDO::FETCH_OBJ);
         if (!$result) {
@@ -155,13 +158,8 @@ class Query {
     {
         $statement = $this->exe($this->compileQuery('SELECT'));
         if (!$statement) {
-            list($SQLSTATE_error_code, $driver_error_code, $error_message) = static::$db->errorInfo();
-            throw new \Exception(sprintf(
-                'SQLSTATE ERROR %s: %s - %s',
-                $SQLSTATE_error_code,
-                $driver_error_code,
-                $error_message
-            ));
+            $error = static::$db->errorInfo();
+            throw new QueryException($error[2], $error[0], $error[1]);
         }
         $result = $statement->fetchAll(\PDO::FETCH_OBJ);
         if (!$result) {
@@ -226,48 +224,93 @@ class Query {
     public function orWhere(): self
     {
         $args = func_get_args();
-        $column = $args[0];
-        $operator = count($args) > 2 ? $args[1] : '=';
-        $value = count($args) > 2 ? $args[2] : $args[1];
+        if (count($args) === 1) {
+            if (!is_callable($args[0])) throw new \InvalidArgumentException('Single parameter must be a callable.');
+            
+            $this->where[] = ['OR', $args[0], null, null];
+        } else {
+            $column = $args[0];
+            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
+            $value = count($args) > 2 ? $args[2] : $args[1];
 
-        $this->where['OR'][] = [$column, $operator, $value];
+            if ($value === null) {
+                if (!in_array($operator, ['IS', 'NOT'])) {
+                    if ($operator !== '=') {
+                        $operator = 'NOT';
+                    } else {
+                        $operator = 'IS';
+                    }
+                }
+            }
 
+            $this->where[] = ['OR', $column, $operator, $value];
+        }
+        
+
+        return $this;
+    }
+
+    public function orWhereIn(string $column, array $values): self
+    {
+        $this->where[] = ['OR', $column, 'IN', $values];
+        return $this;
+    }
+
+    public function orWhereNotIn(string $column, array $values): self
+    {
+        $this->where[] = ['OR', $column, 'NOT IN', $values];
         return $this;
     }
 
     public function where(): self
     {
         $args = func_get_args();
-        $column = $args[0];
-        $operator = count($args) > 2 ? $args[1] : '=';
-        $value = count($args) > 2 ? $args[2] : $args[1];
+        if (count($args) === 1) {
+            if (!is_callable($args[0])) throw new \InvalidArgumentException('Single parameter must be a callable.');
+            
+            $this->where[] = ['AND', $args[0], null, null];
+        } else {
+            $column = $args[0];
+            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
+            $value = count($args) > 2 ? $args[2] : $args[1];
 
-        $this->where['AND'][] = [$column, strtoupper($operator), $value];
+            if ($value === null) {
+                if (!in_array($operator, ['IS', 'NOT'])) {
+                    if ($operator !== '=') {
+                        $operator = 'NOT';
+                    } else {
+                        $operator = 'IS';
+                    }
+                }
+            }
+
+            $this->where[] = ['AND', $column, strtoupper($operator), $value];
+        }
 
         return $this;
     }
 
     public function whereBetween(string $column, array $values, string $conjunction = 'AND')
     {
-        $this->where[strtoupper($conjunction)][] = [$column, 'BETWEEN', $values];
+        $this->where[] = [strtoupper($conjunction), $column, 'BETWEEN', $values];
         return $this;
     }
 
-    public function whereIn(string $column, array $values, string $conjunction = 'AND'): self
+    public function whereIn(string $column, array $values): self
     {
-        $this->where[strtoupper($conjunction)][] = [$column, 'IN', $values];
+        $this->where[] = ['AND', $column, 'IN', $values];
         return $this;
     }
 
     public function whereNotBetween(string $column, array $values, string $conjunction = 'AND'): self
     {
-        $this->where[strtoupper($conjunction)][] = [$column, 'NOT BETWEEN', $values];
+        $this->where[] = [strtoupper($conjunction), $column, 'NOT BETWEEN', $values];
         return $this;
     }
 
-    public function whereNotIn(string $column, array $values, string $conjunction = 'AND'): self
+    public function whereNotIn(string $column, array $values): self
     {
-        $this->where[strtoupper($conjunction)][] = [$column, 'NOT IN', $values];
+        $this->where[] = ['AND', $column, 'NOT IN', $values];
         return $this;
     }
 
@@ -339,7 +382,7 @@ class Query {
         // join
 
         if ($where = $this->compileWhere()) {
-            $sql .= $where;
+            $sql .= ' WHERE '.$where;
         }
 
         if (isset($this->limit)) {
@@ -353,55 +396,45 @@ class Query {
         return $sql;
     }
 
-    private function compileWhere(): string
+    private function compileWhere(bool $enclose = false, int $nested_key = 0): string
     {
         $sql = '';
-        $both = !empty($this->where['AND']) && !empty($this->where['OR']);
 
-        if ($both) {
-            $sql .= '(';
-        }
-
-        if (!empty($this->where['AND'])) {
-            $whereClauses = [];
-            foreach ($this->where['AND'] as $key => $where) {
-                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, 'AND', $key);
-                $this->where['AND'][$key][3] = $input_parameters;
-                $whereClauses[] = $whereSql;
+        if (!empty($this->where)) {
+            if ($enclose) {
+                $sql .= '(';
             }
-            $sql .= implode(' AND ', $whereClauses);
-        }
 
-        if ($both) {
-            $sql .= ') AND (';
-        }
-
-        if (!empty($this->where['OR'])) {
-            $whereClauses = [];
-            foreach ($this->where['OR'] as $key => $where) {
-                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, 'AND', $key);
-                $this->where['OR'][$key][3] = $input_parameters;
-                $whereClauses[] = $whereSql;
+            foreach ($this->where as $key => $where) {
+                if ($key > 0) $sql .= ' '.$where[0].' ';
+                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, $key + $nested_key);
+                $this->where[$key][4] = $input_parameters;
+                $sql .= $whereSql;
             }
-            $sql .= implode(' OR ', $whereClauses);
-        }
 
-        if ($both) {
-            $sql .= ')';
-        }
-
-        if (!empty($sql)) {
-            $sql = ' WHERE '.$sql;
+            if ($enclose) {
+                $sql .= ')';
+            }
         }
 
         return $sql;
     }
 
-    private function compileWhereCriteria(array $where, string $conjunction, int $key)
+    private function compileWhereCriteria($where, int $nested_key)
     {
-        $param_key = $key;
-        $operator = $where[1];
-        $value = $where[2];
+        $conjunction = $where[0];
+
+        if (is_callable($where[1])) {
+            $query = new static(static::$db);
+            $where[1]($query);
+            $sql = $query->compileWhere(true, $nested_key);
+            
+            return [$sql, $query->getWhereParameters()];
+        }
+
+        $param_key = $nested_key;
+        $operator = $where[2];
+        $value = $where[3];
         $input_parameters = [];
         if (is_array($value)) {
             if (in_array($operator, ['IN', 'NOT IN'])) {
@@ -424,9 +457,26 @@ class Query {
                 throw new \InvalidArgumentException(sprintf('Invalid WHERE criteria value "%s', gettype($value)));
             }
         } else {
-            $value = is_numeric($value) ? $value : '\''.$value.'\'';
+            $param_key++;
+            $key = ':'.$conjunction.$param_key;
+            $input_parameters[$key] = $value;
+            $value = $key;
         }
         
-        return [sprintf('%s %s %s', $where[0], $where[1], $value), $input_parameters];
+        return [sprintf('`%s` %s %s', $where[1], $operator, $value), $input_parameters];
+    }
+
+    /**
+     * @return array
+     */
+    private function getWhereParameters()
+    {
+        $parameters = [];
+        foreach ($this->where as $where) {
+            if (isset($where[4]) && !empty($where[4])) {
+                $parameters = array_merge($parameters, $where[4]);
+            }
+        }
+        return $parameters;
     }
 }

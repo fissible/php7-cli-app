@@ -16,6 +16,7 @@ final class DatabaseTest extends TestCase
         $db->exec('CREATE TABLE IF NOT EXISTS test (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
+            color VARCHAR (10) DEFAULT NULL,
             created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
             updated_at TIMESTAMP
         )');
@@ -24,8 +25,8 @@ final class DatabaseTest extends TestCase
     public function testQuery()
     {
         $result = Query::table('test')->insert([
-            ['name' => 'First'],
-            ['name' => 'Second']
+            ['name' => 'First', 'color' => 'red'],
+            ['name' => 'Second', 'color' => null]
         ]);
 
         $this->assertTrue($result);
@@ -34,8 +35,35 @@ final class DatabaseTest extends TestCase
 
         $this->assertEquals('3', $result);
 
+        $row = Query::table('test')
+            ->where('name', 'Second')
+            ->first();
+
+        $this->assertEquals('Second', $row->name);
+
         $rows = Query::table('test')
             ->whereIn('name', ['Second', 'Third'])
+            ->get()
+            ->column('name');
+
+        $this->assertFalse($rows->contains('First'));
+        $this->assertTrue($rows->contains('Second'));
+        $this->assertTrue($rows->contains('Third'));
+
+        $rows = Query::table('test')
+            ->where('color', null)
+            ->get()
+            ->column('name');
+
+        $this->assertFalse($rows->contains('First'));
+        $this->assertTrue($rows->contains('Second'));
+        $this->assertTrue($rows->contains('Third'));
+
+        $rows = Query::table('test')
+            ->where('name', 'Third')
+            ->orWhere(function (Query $query) {
+                $query->where('name', '!=', 'First');
+            })
             ->get()
             ->column('name');
 
@@ -51,12 +79,6 @@ final class DatabaseTest extends TestCase
         $this->assertFalse($rows->contains('First'));
         $this->assertTrue($rows->contains('Second'));
         $this->assertTrue($rows->contains('Third'));
-
-        $row = Query::table('test')
-            ->where('name', 'Second')
-            ->first();
-        
-        $this->assertEquals('Second', $row->name);
 
         $result = Query::table('test')
             ->where('name', 'Second')
