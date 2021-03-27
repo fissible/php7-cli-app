@@ -208,6 +208,15 @@ class Query {
         return $this;
     }
 
+    public function orderBy(string $field, string $dir = 'ASC')
+    {
+        if (!isset($this->order)) {
+            $this->order = [];
+        }
+        $this->order[$field] = strtoupper($dir);
+        return $this;
+    }
+
     public function select(): self
     {
         $this->type = 'SELECT';
@@ -383,6 +392,16 @@ class Query {
 
         if ($where = $this->compileWhere()) {
             $sql .= ' WHERE '.$where;
+        }
+
+        if (isset($this->order)) {
+            $sql .= ' ORDER BY';
+            foreach ($this->order as $key => $dir) {
+                if ($key > 0) {
+                    $sql .= ',';
+                }
+                $sql .= ' '.$key.($dir === 'DESC' ? ' DESC' : ' ASC');
+            }
         }
 
         if (isset($this->limit)) {
