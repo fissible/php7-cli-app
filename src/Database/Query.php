@@ -458,7 +458,10 @@ class Query {
             $sql .= ' ORDER BY ';
             $orderBys = [];
             foreach ($this->order as $key => $dir) {
-                $orderBys[] = '`'.$key.'`'.($dir === 'DESC' ? ' DESC' : ' ASC');
+                if ($key[0] === '`' && $key[-1] === '`' && false !== strpos($key, '.') && substr_count($key, '`') === 2) {
+                    $key = str_replace('.', '`.`', $key);
+                }
+                $orderBys[] = $key.($dir === 'DESC' ? ' DESC' : ' ASC');
             }
             $sql .= implode(', ', $orderBys);
         }
@@ -540,8 +543,13 @@ class Query {
             $input_parameters[$key] = $value;
             $value = $key;
         }
+
+        $column = $where[1];
+        if ($column[0] === '`' && $column[-1] === '`' && false !== strpos($column, '.') && substr_count($column, '`') === 2) {
+            $column = str_replace('.', '`.`', $column);
+        }
         
-        return [sprintf('`%s` %s %s', $where[1], $operator, $value), $input_parameters];
+        return [sprintf('%s %s %s', $column, $operator, $value), $input_parameters];
     }
 
     /**
