@@ -4,6 +4,7 @@ namespace PhpCli;
 
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
+use PhpCli\Filesystem\File;
 use PhpCli\Traits\RequiresBinary;
 use PhpCli\Exceptions\ConfigNotFoundException;
 
