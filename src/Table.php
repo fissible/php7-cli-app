@@ -175,7 +175,7 @@ class Table
                     }
                     $cell_value = isset($row[$x]) ? $row[$x] : '';
 
-                    if (($this->maskDuplicateRowValues === true || is_array($this->maskDuplicateRowValues) && in_array($x, $this->maskDuplicateRow)) && !empty($prev_cell_value)) {
+                    if (($this->maskDuplicateRowValues === true || is_array($this->maskDuplicateRowValues) && in_array($x, $this->maskDuplicateRowValues)) && !empty($prev_cell_value)) {
                         if (isset($row[$x]) && $row[$x] === $prev_cell_value) {
                             $cell_value = '--';
                         }
