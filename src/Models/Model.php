@@ -258,9 +258,6 @@ class Model
     {
         static::getConnection();
 
-        if (!$this->isDirty()) {
-            return true;
-        }
         if (!empty($data)) {
             foreach ($data as $key => $val) {
                 if ($this->attributes[$key] !== $val) {
@@ -269,11 +266,16 @@ class Model
             }
         }
 
+        if (!$this->isDirty()) {
+            return true;
+        }
+
         $data = $this->dirty;
 
-        if (array_key_exists(static::UPDATED_FIELD, $this->attributes)) {
+        if (static::UPDATED_FIELD && array_key_exists(static::UPDATED_FIELD, $data)) {
             unset($data[static::UPDATED_FIELD]);
         }
+        unset($data[static::$primaryKey]);
 
         $query = Query::table(static::getTable());
         $query->where(static::$primaryKey, $this->primaryKey());
