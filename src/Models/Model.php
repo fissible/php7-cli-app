@@ -270,13 +270,15 @@ class Model
         }
 
         $data = $this->dirty;
-        $data[static::$primaryKey] = $this->primaryKey();
 
         if (array_key_exists(static::UPDATED_FIELD, $this->attributes)) {
             unset($data[static::UPDATED_FIELD]);
         }
 
-        if (Query::table(static::getTable())->update($data, static::UPDATED_FIELD)) {
+        $query = Query::table(static::getTable());
+        $query->where(static::$primaryKey, $this->primaryKey());
+
+        if ($query->update($data, static::UPDATED_FIELD)) {
             $this->refresh();
 
             return true;
