@@ -221,6 +221,14 @@ class Model
         return null;
     }
 
+    public function query()
+    {
+        if (!isset($this->query)) {
+            $this->query = Query::table(static::getTable());
+        }
+        return $this;
+    }
+
     public function refresh()
     {
         static::getConnection();
