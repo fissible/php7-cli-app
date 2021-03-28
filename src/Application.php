@@ -192,6 +192,14 @@ class Application
         $this->Router->bind(new Route($name, $action));
     }
 
+    public function config(): ?Config
+    {
+        if (isset($this->Config)) {
+            return $this->Config;
+        }
+        return null;
+    }
+
     public function route($input, array $params = [])
     {
         $returnCode = 0;
