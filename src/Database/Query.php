@@ -82,7 +82,7 @@ class Query {
         return $this->exe($this->compileQuery());
     }
 
-    public function transaction(callable $callback)
+    public static function transaction(callable $callback)
     {
         try {
             static::$db->beginTransaction();
