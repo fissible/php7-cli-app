@@ -86,7 +86,7 @@ class Query {
     {
         try {
             static::$db->beginTransaction();
-            $callback();
+            return $callback();
             static::$db->commit();
         } catch (\Throwable $e) {
             static::$db->rollBack();
