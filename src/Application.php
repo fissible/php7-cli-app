@@ -82,6 +82,32 @@ class Application
         $this->init();
     }
 
+    public static function hash(...$args)
+    {
+        return sha1(var_export($args, true));
+    }
+
+    public static function cacheResult(callable $callback, ...$args)
+    {
+        static $cache = [];
+        $callbackHash = static::closureId($callback);
+        $hash = static::hash(...$args);
+
+        if (!isset($cache[$callbackHash]) || !isset($cache[$callbackHash][$hash])) {
+            $cache[$callbackHash] = [
+                $hash => $callback(...$args)
+            ];
+        }
+
+        return $cache[$callbackHash][$hash];
+    }
+
+    private static function closureId(callable $callback)
+    {
+        $rf = new \ReflectionFunction($callback);
+        return sha1($rf->getFileName().$rf->getEndLine());
+    }
+
     public function checkMissingParameters()
     {
         $this->Parameters->validateHasRequiredArguments();

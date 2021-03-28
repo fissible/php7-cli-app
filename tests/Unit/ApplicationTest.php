@@ -14,6 +14,47 @@ final class ApplicationTest extends TestCase
         $this->app = new Application();
     }
 
+    public function testHash()
+    {
+        $data = ['one', 2, ['t', 'h', 'r', 'e', 'e']];
+        $expected = sha1(var_export($data, true));
+        $actual = Application::hash(...$data);
+
+        $this->assertEquals($expected, $actual);
+    }
+
+    public function testCache()
+    {
+        $runs = 0;
+        $data = ['one', 2, ['t', 'h', 'r', 'e', 'e']];
+        $hash = null;
+        $callback = function ($one, $two, $three) use (&$runs) {
+            $runs++;
+            return str_repeat($one, $two).implode($three);
+        };
+
+        $value = Application::cacheResult($callback, ...$data);
+
+        $this->assertEquals('oneonethree', $value);
+        $this->assertEquals(1, $runs);
+
+        $value = Application::cacheResult($callback, ...$data);
+
+        $this->assertEquals('oneonethree', $value);
+        $this->assertEquals(1, $runs);
+
+        $data = ['two', 2, ['t', 'h', 'r', 'e', 'e']];
+        $value = Application::cacheResult($callback, ...$data);
+
+        $this->assertEquals('twotwothree', $value);
+        $this->assertEquals(2, $runs);
+
+        $value = Application::cacheResult($callback, ...$data);
+
+        $this->assertEquals('twotwothree', $value);
+        $this->assertEquals(2, $runs);
+    }
+
     public function testTable()
     {
         $expected = '
