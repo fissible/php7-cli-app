@@ -221,12 +221,11 @@ class Model
         return null;
     }
 
-    public function query()
+    public static function query()
     {
-        if (!isset($this->query)) {
-            $this->query = Query::table(static::getTable());
-        }
-        return $this;
+        $instance = static::newInstance();
+        $instance->getQuery();
+        return $instance;
     }
 
     public function refresh()
