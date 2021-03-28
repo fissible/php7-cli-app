@@ -82,6 +82,18 @@ class Query {
         return $this->exe($this->compileQuery());
     }
 
+    public function transaction(callable $callback)
+    {
+        try {
+            static::$db->beginTransaction();
+            $callback();
+            static::$db->commit();
+        } catch (\Throwable $e) {
+            static::$db->rollBack();
+            throw $e;
+        }
+    }
+
     public function exe(string $sql)
     {
         if (!isset(static::$db)) {
@@ -100,24 +112,26 @@ class Query {
 
         // print_r(['sql'=>$sql, 'input_parameters'=>array_merge($input_parameters, $where_params)]);
 
-        static::$db->beginTransaction();
-        try {
-            if ($this->isMultiInsert()) {
+        
+        if ($this->isMultiInsert()) {
+            try {
+                static::$db->beginTransaction();
                 foreach ($this->insert as $input_parameters) {
                     $parameters = array_merge($input_parameters, $where_params);
                     $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
                     $result = $stmt->execute();
                 }
-            } else {
-                $parameters = array_merge($input_parameters, $where_params);
-                $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
-                $result = $stmt->execute();
+                static::$db->commit();
+            } catch (\Throwable $e) {
+                static::$db->rollBack();
+                throw $e;
             }
-        } catch (\Throwable $e) {
-            static::$db->rollBack();
-            throw $e;
+        } else {
+            $parameters = array_merge($input_parameters, $where_params);
+            $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
+            $result = $stmt->execute();
         }
-        static::$db->commit();
+        
 
         if (substr($sql, 0, 6) === 'SELECT') {
             return $stmt;
