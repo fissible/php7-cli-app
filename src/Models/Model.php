@@ -67,7 +67,10 @@ class Model
 
     public function first()
     {
-        return static::newInstance($this->getQuery()->first());
+        if ($result = $this->getQuery()->first()) {
+            return static::newInstance($result);
+        }
+        return null;
     }
 
     public function get()
