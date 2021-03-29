@@ -23,13 +23,15 @@ class Query {
 
     protected array $select = ['*'];
 
-    protected string $type;
+    protected string $type = 'SELECT';
 
     protected array $update;
 
     protected string $updateField;
 
     protected array $where = [];
+
+    private int $param_key = 0;
 
     public function __construct(\PDO $db = null)
     {
@@ -103,9 +105,9 @@ class Query {
         }
         
         $input_parameters = [];
-        if (substr($sql, 0, 6) === 'INSERT') {
+        if (substr($sql, 0, 6) === 'INSERT' && isset($this->insert)) {
             $input_parameters = $this->insert;
-        } elseif (substr($sql, 0, 6) === 'UPDATE') {
+        } elseif (substr($sql, 0, 6) === 'UPDATE' && isset($this->update)) {
             $input_parameters = $this->update;
         }
 
@@ -140,7 +142,7 @@ class Query {
         }
 
         if (substr($sql, 0, 6) === 'INSERT' && !$this->isMultiInsert()) {
-            return static::$db->lastInsertId();
+            return static::insertId();
         }
 
         return $result;
@@ -209,6 +211,11 @@ class Query {
         $this->insert = $data;
         $this->type = 'INSERT';
         return $this->exe($this->compileQuery());
+    }
+
+    public static function insertId()
+    {
+        return static::$db->lastInsertId();
     }
 
     public function innerJoin(string $table, string $localKey, string $foreignKey)
@@ -334,52 +341,58 @@ class Query {
     public function where(): self
     {
         $args = func_get_args();
-        if (count($args) === 1) {
-            if (!is_callable($args[0])) throw new \InvalidArgumentException('Single parameter must be a callable.');
-            
-            $this->where[] = ['AND', $args[0], null, null];
-        } else {
-            $column = $args[0];
+        $operator = null;
+        $value = null;
+
+        if (count($args) === 1 && !is_callable($args[0])) {
+            throw new \InvalidArgumentException('Single parameter must be a callable.');
+        }
+
+        if (count($args) > 1) {
             $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
             $value = count($args) > 2 ? $args[2] : $args[1];
 
-            if ($value === null) {
-                if (!in_array($operator, ['IS', 'NOT'])) {
-                    if ($operator !== '=') {
-                        $operator = 'NOT';
-                    } else {
-                        $operator = 'IS';
-                    }
+            // `column` IS NULL || `column` IS NOT NULL
+            if ($value === null && !in_array($operator, ['IS', 'IS NOT'])) {
+                if ($operator === '=') {
+                    $operator = 'IS';
+                } elseif ($operator === '!=' || $operator === '<>') {
+                    $operator = 'IS NOT';
+                } else {
+                    throw new \InvalidArgumentException(sprintf('Invalid operator "%s" for NULL value.', $operator));
                 }
             }
-
-            $this->where[] = ['AND', $column, strtoupper($operator), $value];
         }
 
-        return $this;
+        return $this->addWhere('AND', $args[0], $operator, $value);
     }
 
+    /**
+     * Inclusive; BETWEEN 3 AND 5 yields 3, 4, 5
+     */
     public function whereBetween(string $column, array $values, string $conjunction = 'AND')
     {
-        $this->where[] = [strtoupper($conjunction), $column, 'BETWEEN', $values];
-        return $this;
+        return $this->addWhere(strtoupper($conjunction), $column, 'BETWEEN', $values);
     }
 
     public function whereIn(string $column, array $values): self
     {
-        $this->where[] = ['AND', $column, 'IN', $values];
-        return $this;
+        return $this->addWhere('AND', $column, 'IN', $values);
     }
 
     public function whereNotBetween(string $column, array $values, string $conjunction = 'AND'): self
     {
-        $this->where[] = [strtoupper($conjunction), $column, 'NOT BETWEEN', $values];
-        return $this;
+        return $this->addWhere(strtoupper($conjunction), $column, 'NOT BETWEEN', $values);
     }
 
     public function whereNotIn(string $column, array $values): self
     {
-        $this->where[] = ['AND', $column, 'NOT IN', $values];
+        return $this->addWhere('AND', $column, 'NOT IN', $values);
+    }
+
+    private function addWhere(string $conjunction, $column, $operator = null, $value = null)
+    {
+        $this->where[] = [$conjunction, $column, $operator, $value];
         return $this;
     }
 
@@ -493,7 +506,7 @@ class Query {
         return $sql;
     }
 
-    private function compileWhere(bool $enclose = false, int $nested_key = 0): string
+    private function compileWhere(bool $enclose = false, int &$param_key = 0): string
     {
         $sql = '';
 
@@ -504,7 +517,8 @@ class Query {
 
             foreach ($this->where as $key => $where) {
                 if ($key > 0) $sql .= ' '.$where[0].' ';
-                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, $key + $nested_key);
+                $param_key + $key;
+                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, $param_key);
                 $this->where[$key][4] = $input_parameters;
                 $sql .= $whereSql;
             }
@@ -517,19 +531,18 @@ class Query {
         return $sql;
     }
 
-    private function compileWhereCriteria($where, int $nested_key)
+    private function compileWhereCriteria($where, int &$param_key = 0)
     {
         $conjunction = $where[0];
 
         if (is_callable($where[1])) {
             $query = new static(static::$db);
             $where[1]($query);
-            $sql = $query->compileWhere(true, $nested_key);
+            $sql = $query->compileWhere(true, $param_key);
             
             return [$sql, $query->getWhereParameters()];
         }
 
-        $param_key = $nested_key;
         $operator = $where[2];
         $value = $where[3];
         $input_parameters = [];
@@ -538,15 +551,15 @@ class Query {
                 $in = '';
                 foreach ($value as $item) {
                     $param_key++;
-                    $key = ':'.$conjunction.$param_key;
-                    $in .= "$key,";
+                    $key = ':'.(str_replace(' ', '_', $operator)).$param_key;
+                    $in .= "$key, ";
                     $input_parameters[$key] = $item;
                 }
-                $value = '('.rtrim($in, ',').')';
+                $value = '('.rtrim(trim($in), ',').')';
             } elseif($operator === 'BETWEEN') {
                 $value = array_values($value);
-                $keyFrom = $conjunction.(++$param_key);
-                $keyTo = $conjunction.(++$param_key);
+                $keyFrom = $operator.(++$param_key);
+                $keyTo = $operator.(++$param_key);
                 $input_parameters[':'.$keyFrom] = $value[0];
                 $input_parameters[':'.$keyTo] = $value[1];
                 $value = sprintf(':%s AND :%s', $keyFrom, $keyTo);
