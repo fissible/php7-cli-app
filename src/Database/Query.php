@@ -84,14 +84,16 @@ class Query {
 
     public static function transaction(callable $callback)
     {
+        $return = null;
         try {
             static::$db->beginTransaction();
-            return $callback();
+            $return = $callback();
             static::$db->commit();
         } catch (\Throwable $e) {
             static::$db->rollBack();
             throw $e;
         }
+        return $return;
     }
 
     public function exe(string $sql)
