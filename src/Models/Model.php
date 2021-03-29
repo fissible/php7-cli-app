@@ -20,7 +20,7 @@ class Model
 
     protected const UPDATED_FIELD = 'updated_at';
 
-    private array $attributes;
+    private array $attributes = [];
 
     private array $dirty;
 
@@ -374,7 +374,6 @@ class Model
      */
     protected function setAttributes(array $attributes = [])
     {
-        if (!isset($this->attributes)) $this->attributes = [];
         foreach ($attributes as $field => $attribute) {
             $this->attributes[$field] = $attribute;
         }

@@ -150,13 +150,7 @@ class Query {
 
     private function prepareStatement(string $sql): \PDOStatement
     {
-        try {
-            $stmt = static::$db->prepare($sql);
-        } catch (\PDOException $e) {
-            var_dump($sql);
-            throw $e;
-        }
-        
+        $stmt = static::$db->prepare($sql);
         if (!$stmt) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
