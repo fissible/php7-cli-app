@@ -108,17 +108,6 @@ final class DatabaseTest extends TestCase
         Query::table('test')->insert(['name' => 'Ninth', 'color' => 'Green', 'size' => 8]);
         Query::table('test')->insert(['name' => 'Tenth', 'color' => 'Green', 'size' => 9]);
 
-        print("\n".
-            Query::table('test')
-                ->whereBetween('size', [3, 5])
-                ->whereNotIn('name', ['Ninth', 'Tenth'])
-                ->orWhere(function (Query $query) {
-                    $query->whereIn('name', ['First', 'Third']);
-                })
-                ->orWhere('color', 'Yellow')
-                ->compileQuery()
-        ."\n");
-
         $rows = Query::table('test')
             ->whereBetween('size', [3, 5])
             ->whereNotIn('name', ['Ninth', 'Tenth'])
@@ -128,17 +117,6 @@ final class DatabaseTest extends TestCase
             ->orWhere('color', 'Yellow')
             ->get()
             ->column('name');
-
-        print_r($rows);
-
-        var_dump((new Query)->exe(
-            "SELECT * FROM `test` WHERE 
-            size BETWEEN 3 AND 5 
-            AND name NOT IN ('Ninth', 'Tenth') 
-            OR (name IN ('First', 'Third')) 
-            OR color = 'Yellow'
-            ")->fetchAll(\PDO::FETCH_OBJ)
-        );
 
         $this->assertTrue($rows->contains('First'));
         $this->assertTrue($rows->contains('Third'));

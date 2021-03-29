@@ -109,6 +109,14 @@ class Model
     }
 
     /**
+     * @return array
+     */
+    public function getAttributes(): array
+    {
+        return $this->attributes;
+    }
+
+    /**
      * @return string
      */
     public static function getTable(): string
@@ -366,7 +374,10 @@ class Model
      */
     protected function setAttributes(array $attributes = [])
     {
-        $this->attributes = $attributes;
+        if (!isset($this->attributes)) $this->attributes = [];
+        foreach ($attributes as $field => $attribute) {
+            $this->attributes[$field] = $attribute;
+        }
         $this->dirty = [];
     }
 

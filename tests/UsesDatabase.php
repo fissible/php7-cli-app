@@ -31,6 +31,9 @@ trait UsesDatabase
 
     protected function tearDownDatabase(): void
     {
-        $this->getDatabaseFile()->delete();
+        $File = $this->getDatabaseFile();
+        if ($File->exists()) {
+            $File->delete();
+        }
     }
 }

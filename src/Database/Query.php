@@ -150,7 +150,13 @@ class Query {
 
     private function prepareStatement(string $sql): \PDOStatement
     {
-        $stmt = static::$db->prepare($sql);
+        try {
+            $stmt = static::$db->prepare($sql);
+        } catch (\PDOException $e) {
+            var_dump($sql);
+            throw $e;
+        }
+        
         if (!$stmt) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
@@ -165,9 +171,9 @@ class Query {
             elseif (is_bool($value)) $param = \PDO::PARAM_BOOL;
             elseif (is_null($value)) $param = \PDO::PARAM_NULL;
             elseif (is_string($value)) $param = \PDO::PARAM_STR;
-            else $param = FALSE;
+            else $param = false;
                 
-            if ($param) $stmt->bindValue($key, $value, $param);
+            if ($param !== false) $stmt->bindValue($key, $value, $param);
         }
         return $stmt;
     }

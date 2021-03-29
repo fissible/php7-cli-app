@@ -25,8 +25,6 @@ final class ModelTest extends TestCase
         $Model = Model::find(intval($result));
 
         $this->assertEquals('ModelFind', $Model->name);
-
-        $this->tearDownDatabase();
     }
 
     public function testWhere()
@@ -53,8 +51,6 @@ final class ModelTest extends TestCase
         $Model = Model::where('color', 'blue')->where('size', 'medium')->first();
 
         $this->assertEquals('Second', $Model->name);
-
-        $this->tearDownDatabase();
     }
 
     public function testGetAttribute()
@@ -100,8 +96,6 @@ final class ModelTest extends TestCase
         $Model->setAttribute('id', (int) $result);
 
         $this->assertTrue($Model->delete());
-
-        $this->tearDownDatabase();
     }
 
     public function testExists()
@@ -121,8 +115,6 @@ final class ModelTest extends TestCase
         $Model = Model::find(intval($result));
 
         $this->assertTrue($Model->exists());
-
-        $this->tearDownDatabase();
     }
 
     public function testHasAttribute()
@@ -162,9 +154,8 @@ final class ModelTest extends TestCase
         $this->assertFalse($Model->exists());
         $this->assertTrue($Model->insert());
         $this->assertTrue($Model->exists());
-        $this->assertEquals(date('Y-m-d H:i'), $Model->created_at->format('Y-m-d H:i'));
 
-        $this->tearDownDatabase();
+        $this->assertEquals(date('Y-m-d H:i'), $Model->created_at->format('Y-m-d H:i'));
     }
 
     public function testPrimaryKey()
@@ -202,8 +193,6 @@ final class ModelTest extends TestCase
         $Model->refresh();
 
         $this->assertEquals('UpdatedName', $Model->name);
-
-        $this->tearDownDatabase();
     }
 
     public function testSave()
@@ -231,8 +220,6 @@ final class ModelTest extends TestCase
         $Model = Model::find($Model->id);
 
         $this->assertEquals('UpdatedName', $Model->name);
-
-        $this->tearDownDatabase();
     }
 
     public function testUpdate()
@@ -257,7 +244,10 @@ final class ModelTest extends TestCase
         $Model = Model::find($id);
 
         $this->assertEquals('AnotherName', $Model->getAttribute('name'));
+    }
 
+    public function tearDown(): void
+    {
         $this->tearDownDatabase();
     }
 }
