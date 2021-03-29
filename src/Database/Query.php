@@ -27,7 +27,7 @@ class Query {
 
     protected array $update;
 
-    protected string $updateField;
+    protected ?string $updateField;
 
     protected array $where = [];
 
