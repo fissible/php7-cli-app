@@ -21,7 +21,6 @@ final class ModelTest extends TestCase
         )');
 
         $result = Query::table('model')->insert(['name' => 'ModelFind']);
-
         $Model = Model::find(intval($result));
 
         $this->assertEquals('ModelFind', $Model->name);
@@ -269,6 +268,8 @@ final class ModelTest extends TestCase
             protected static string $table = 'test_table';
             protected static $casts = ['quantity' => 'int'];
             protected array $dates = ['settlement'];
+            protected const CREATED_FIELD = null;
+            protected const UPDATED_FIELD = null;
         };
 
         $this->assertEquals($date, $Model->settlement);
@@ -279,6 +280,24 @@ final class ModelTest extends TestCase
         $this->assertEquals($date, $Model->settlement);
         $this->assertEquals(3539, $Model->quantity);
         $this->assertEquals(27.05, $Model->price);
+    }
+
+    public function testSerialization()
+    {
+        $date = \DateTime::createFromFormat('Ymd', '20200218');
+        $settlementDate = $date->getTimestamp();
+        $quantity = '3539';
+        $price = '27.05';
+        $Model = new TestModel([
+            'settlement' => $settlementDate,
+            'quantity' => (int) $quantity,
+            'price' => (float) $price
+        ]);
+
+        $ser = serialize($Model);
+        $newModel = unserialize($ser);
+
+        $this->assertEquals($Model->getAttributes(), $newModel->getAttributes());
     }
 
     public function tearDown(): void

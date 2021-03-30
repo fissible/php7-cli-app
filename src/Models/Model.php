@@ -4,7 +4,7 @@ namespace PhpCli\Models;
 
 use PhpCli\Database\Query;
 
-class Model
+class Model implements \Serializable
 {
     protected static string $table;
 
@@ -15,6 +15,17 @@ class Model
     protected static $casts = [];
 
     protected array $dates = [];
+
+    protected ?bool $exists = null;
+
+    protected static array $castTypes = [
+        'int', 'integer',
+        'bool', 'boolean',
+        'float', 'long', 'short', 'real',
+        'string',
+        'array', 'json',
+        'date', 'datetime'
+    ];
     
     protected static $dateFormat = 'U';
 
@@ -24,7 +35,7 @@ class Model
 
     private array $attributes = [];
 
-    private array $dirty;
+    private array $dirty = [];
 
     private Query $query;
 
@@ -69,10 +80,12 @@ class Model
 
     public function first()
     {
+        $instance = null;
         if ($result = $this->getQuery()->first()) {
-            return static::newInstance($result);
+            $instance = static::newInstance($result);
+            $instance->exists = true;
         }
-        return null;
+        return $instance;
     }
 
     public function get()
@@ -80,7 +93,9 @@ class Model
         $results = $this->getQuery()->get();
 
         return $results->map(function ($attributes) {
-            return static::newInstance($attributes);
+            $instance = static::newInstance($attributes);
+            $instance->exists = true;
+            return $instance;
         });
     }
 
@@ -99,51 +114,6 @@ class Model
         } elseif (isset($this->attributes[$name])) {
             $value = $this->attributes[$name];
         }
-
-        // Casting
-        if (!is_null($value)) {
-            if (in_array($name, array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD]))) {
-                $value = \DateTime::createFromFormat(static::$dateFormat, (string) $value);
-            } elseif (array_key_exists($name, static::$casts)) {
-                switch (static::$casts[$name]) {
-                    case 'int':
-                    case 'integer':
-                        $value = (int) $value;
-                    break;
-                    case 'bool':
-                    case 'boolean':
-                        $value = (bool) $value;
-                    break;
-                    case 'float':
-                    case 'long':
-                    case 'short':
-                        $value = (float) $value;
-                    break;
-                    case 'string':
-                        $value = (string) $value;
-                    break;
-                    case 'array':
-                        if ($value[0] === '{' && $decoded = json_decode($value)) {
-                            $value = $decoded;
-                        } else {
-                            $value = (array) $value;
-                        }
-                    break;
-                    case 'date':
-                    case 'datetime':
-                        $value = \DateTime::createFromFormat(static::$dateFormat, (string) $value);
-                    break;
-                    default:
-                        $value = \DateTime::createFromFormat(static::$dateFormat, (string) $value);
-                        if (0 === strpos(static::$casts[$name], 'date') && false !== strpos(static::$casts[$name], ':')) {
-                            [$cast, $format] = explode(':', static::$casts[$name]);
-                            $value = $value->format($format);
-                        }
-                    break;
-                }
-            }
-        }
-        
 
         return $value;
     }
@@ -181,11 +151,16 @@ class Model
      */
     public function setAttribute(string $name, $value): self
     {
-        if (in_array($name, array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD])) && $value instanceof \DateTime) {
-            $value = $value->format(static::$dateFormat);
+        $exists = $this->exists();
+
+        // Casting
+        $value = $this->castAttribute($name, $value);
+
+        if (!isset($this->attributes[$name])) {
+            $this->attributes[$name] = null;
         }
 
-        if (!$this->exists()) {
+        if (!$exists) {
             $this->attributes[$name] = $value;
         } else {
             if ($this->attributes[$name] !== $value) {
@@ -194,7 +169,75 @@ class Model
                 unset($this->dirty[$name]);
             }
         }
+
         return $this;
+    }
+
+    /**
+     * Cast the value for instance representation.
+     * 
+     * @param string $name
+     * @param mixed $value
+     * @return mixed
+     */
+    protected function castAttribute(string $name, $value)
+    {
+        $castType = null;
+        $format = null;
+        if (isset(static::$casts[$name])) {
+            $castType = static::$casts[$name];
+            if (false !== ($pos = strpos($castType, ':'))) {
+                $format = substr($castType, $pos + 1);
+            }
+        }
+
+        if (is_null($value) && in_array($castType, static::$castTypes)) {
+            return $value;
+        }
+        
+        switch ($castType) {
+            case 'int':
+            case 'integer':
+                return (int) $value;
+            break;
+            case 'bool':
+            case 'boolean':
+                return (bool) $value;
+            break;
+            case 'float':
+            case 'long':
+            case 'short':
+            case 'real':
+                return (float) $value;
+            break;
+            case 'string':
+                return (string) $value;
+            break;
+            case 'json':
+            case 'array':
+                return json_decode($value);
+            break;
+            case 'date':
+                $value = $this->asDate($value);
+                if ($format) {
+                    $value = $format->format($value);
+                }
+                return $value;
+            break;
+            case 'datetime':
+                $value = $this->asDatetime($value);
+                if ($format) {
+                    $value = $format->format($value);
+                }
+                return $value;
+            break;
+        }
+
+        if (!is_null($value) && in_array($name, $this->getDateFields())) {
+            return $this->asDatetime($value);
+        }
+
+        return $value;
     }
 
     /**
@@ -206,9 +249,12 @@ class Model
     {
         static::getConnection();
 
-        return Query::table(static::getTable())
-            ->where(static::$primaryKey, $this->primaryKey())
-            ->delete();
+        $query = Query::table(static::getTable())
+            ->where(static::$primaryKey, $this->primaryKey());
+
+        $this->exists = !$query->delete();
+
+        return !$this->exists;
     }
 
     /**
@@ -218,6 +264,10 @@ class Model
      */
     public function exists(): bool
     {
+        if (isset($this->exists)) {
+            return $this->exists;
+        }
+
         if (empty($this->attributes)) return false;
 
         return isset($this->attributes[static::$primaryKey]);
@@ -251,11 +301,19 @@ class Model
             throw new \InvalidArgumentException('Data includes primary key value.');
         }
 
-        if ($id = Query::table(static::getTable())->insert($data)) {
+        // Un-cast
+        foreach ($this->getDateFields() as $field) {
+            if (isset($data[$field]) && $data[$field] instanceof \DateTime) {
+                $data[$field] = $data[$field]->format(static::$dateFormat);
+            }
+        }
+
+        if ($id = Query::table(static::getTable())->insert($data, static::CREATED_FIELD)) {
             if (static::$primaryKeyType === 'int') {
                 $id = intval($id);
             }
             $this->attributes[static::$primaryKey] = $id;
+            $this->exists = true;
             $this->refresh();
 
             return true;
@@ -266,7 +324,7 @@ class Model
 
     public function primaryKey()
     {
-        if ($this->exists()) {
+        if (isset($this->attributes[static::$primaryKey])) {
             return $this->attributes[static::$primaryKey];
         }
         return null;
@@ -283,7 +341,7 @@ class Model
     {
         static::getConnection();
 
-        if (!$this->exists()) {
+        if (!($this->exists())) {
             throw new \LogicException('Cannot refresh nonexistent model.');
         }
 
@@ -303,6 +361,40 @@ class Model
         } else {
             return $this->insert();
         }
+    }
+    
+    public function serialize()
+    {
+        $attributes = $this->attributes;
+        $dirty = $this->dirty;
+
+        foreach ($this->dates as $dateField) {
+            if (isset($attributes[$dateField]) && $attributes[$dateField] instanceof \DateTime) {
+                $attributes[$dateField] = $this->serializeDate($attributes[$dateField]);
+            }
+            if (isset($dirty[$dateField]) && $dirty[$dateField] instanceof \DateTime) {
+                $dirty[$dateField] = $this->serializeDate($dirty[$dateField]);
+            }
+        }
+
+        return serialize([$this->exists, $attributes, $dirty]);
+    }
+    
+    public function unserialize($data)
+    {
+        [$this->exists, $attributes, $dirty] = unserialize($data);
+
+        foreach ($this->dates as $dateField) {
+            if (isset($attributes[$dateField])) {
+                $attributes[$dateField] = new \DateTime($attributes[$dateField]);
+            }
+            if (isset($dirty[$dateField])) {
+                $dirty[$dateField] = new \DateTime($dirty[$dateField]);
+            }
+        }
+
+        $this->attributes = $attributes;
+        $this->dirty = $dirty;
     }
 
     public function update(array $data = []): bool
@@ -328,6 +420,13 @@ class Model
         }
         unset($data[static::$primaryKey]);
 
+        // Un-cast
+        foreach ($this->getDateFields() as $field) {
+            if (isset($data[$field]) && $data[$field] instanceof \DateTime) {
+                $data[$field] = $data[$field]->format(static::$dateFormat);
+            }
+        }
+
         $query = Query::table(static::getTable());
         $query->where(static::$primaryKey, $this->primaryKey());
 
@@ -338,6 +437,79 @@ class Model
         }
 
         return false;
+    }
+
+    /**
+     * @param mixed $value
+     * @return \DateTime
+     */
+    protected function asDate($value): \DateTime
+    {
+        return $this->asDatetime($value)->setTime(0, 0);
+    }
+
+    /**
+     * @param mixed $value
+     * @return \DateTime
+     */
+    protected function asDatetime($value): \DateTime
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return \DateTime::createFromInterface($value);
+        }
+
+        if (is_numeric($value)) {
+            return \DateTime::createFromFormat('U', (string) $value);
+        }
+
+        // Y-m-d H:i:s
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{2}):(\d{2}):(\d{2})$/', $value)) {
+            return \DateTime::createFromFormat('Y-m-d H:i:s', $value);
+        }
+
+        // Y-m-d
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $value)) {
+            return (\DateTime::createFromFormat('Y-m-d', $value))->setTime(0, 0);
+        }
+
+        if (static::$dateFormat) {
+            if (false === \DateTime::createFromFormat(static::$dateFormat, (string) $value)) {
+                var_dump($value);
+            }
+            return \DateTime::createFromFormat(static::$dateFormat, (string) $value);
+        }
+        
+        return new \DateTime((string) $value);
+    }
+
+    protected function getDateFields(): array
+    {
+        return array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD]);
+    }
+    
+    /**
+     * Serialize \DateTime objects
+     * 
+     * @param \DateTimeInterface $date
+     * @return string
+     */
+    protected function serializeDate(\DateTimeInterface $date): string
+    {
+        return $date->format('Y-m-d\TH:i:sP');
+    }
+
+    /**
+     * Set the attributes array.
+     */
+    protected function setAttributes(array $attributes = [])
+    {
+        foreach ($attributes as $field => $value) {
+            $this->attributes[$field] = $this->castAttribute($field, $value);
+            if (isset($this->dirty[$field]) && $this->dirty[$field] === $this->attributes[$field]) {
+                unset($this->dirty[$field]);
+            }
+        }
+        return $this;
     }
 
     private function getQuery()
@@ -407,17 +579,6 @@ class Model
         }
 
         $this->setAttribute($name, $value);
-    }
-
-    /**
-     * Set the attributes array.
-     */
-    protected function setAttributes(array $attributes = [])
-    {
-        foreach ($attributes as $field => $attribute) {
-            $this->attributes[$field] = $attribute;
-        }
-        $this->dirty = [];
     }
 
     private function attributeGetter(string $name)

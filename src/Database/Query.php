@@ -27,7 +27,9 @@ class Query {
 
     protected array $update;
 
-    protected ?string $updateField;
+    protected ?string $createdField;
+
+    protected ?string $updatedField;
 
     protected array $where = [];
 
@@ -147,7 +149,13 @@ class Query {
 
     private function prepareStatement(string $sql): \PDOStatement
     {
-        $stmt = static::$db->prepare($sql);
+        try {
+            $stmt = static::$db->prepare($sql);
+        } catch (\PDOException $e) {
+            var_dump($this->compileQuery());
+            throw $e;
+        }
+        // $stmt = static::$db->prepare($sql);
         if (!$stmt) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
@@ -200,11 +208,13 @@ class Query {
 
     /**
      * @param array $data
+     * @param string|null $createdField
      * @return bool|string
      */
-    public function insert(array $data)
+    public function insert(array $data, ?string $createdField = null)
     {
         $this->insert = $data;
+        $this->createdField = $createdField;
         $this->type = 'INSERT';
         return $this->exe($this->compileQuery());
     }
@@ -242,13 +252,13 @@ class Query {
 
     /**
      * @param array $data
-     * @param string|null $updateField
+     * @param string|null $updatedField
      * @return bool
      */
-    public function update(array $data, ?string $updateField = null): bool
+    public function update(array $data, ?string $updatedField = null): bool
     {
         $this->update = $data;
-        $this->updateField = $updateField;
+        $this->updatedField = $updatedField;
         $this->type = 'UPDATE';
         return $this->exe($this->compileQuery());
     }
@@ -437,11 +447,14 @@ class Query {
                         $sql .= sprintf(" `%s`,", $key);
                     }
                 }
+                if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
+                    $sql .= sprintf(" `%s`,", $this->createdField);
+                }
                 
                 $sql = ltrim(rtrim($sql, ','));
                 $sql .= ') VALUES ';
-
                 $sql .= '(';
+
                 if ($this->isMultiInsert($input_parameters)) {
                     foreach ($input_parameters[0] as $key => $val) {
                         $sql .= sprintf(" :%s,", $key);
@@ -451,7 +464,11 @@ class Query {
                         $sql .= sprintf(" :%s,", $key);
                     }
                 }
-                $sql = ltrim(rtrim($sql, ','));
+                if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
+                    $sql .= ' CURRENT_TIMESTAMP';
+                } else {
+                    $sql = ltrim(rtrim($sql, ','));
+                }
                 $sql .= ')';
             break;
             case 'SELECT':
@@ -465,8 +482,8 @@ class Query {
                 foreach ($input_parameters as $key => $val) {
                     $sql .= sprintf(" `%s` = :%s,", $key, $key);
                 }
-                if (isset($this->updateField)) {
-                    $sql .= ' `'.$this->updateField.'` = CURRENT_TIMESTAMP';
+                if (isset($this->updatedField) && !isset($input_parameters[$this->updatedField])) {
+                    $sql .= ' `'.$this->updatedField.'` = CURRENT_TIMESTAMP';
                 } else {
                     $sql = rtrim($sql, ',');
                 }
