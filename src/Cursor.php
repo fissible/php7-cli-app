@@ -8,6 +8,16 @@ class Cursor
 {
     use RequiresBinary;
 
+    public static function hide()
+    {
+        static::tput('civis');
+    }
+
+    public static function show()
+    {
+        static::tput('cnorm');
+    }
+
     public static function moveDown(int $distance = 1)
     {
         static::tput(sprintf('cud %d', $distance));
