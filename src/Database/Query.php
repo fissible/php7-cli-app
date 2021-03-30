@@ -114,9 +114,6 @@ class Query {
         // WHERE IN variables
         $where_params = $this->getWhereParameters();
 
-        // print_r(['sql'=>$sql, 'input_parameters'=>array_merge($input_parameters, $where_params)]);
-
-        
         if ($this->isMultiInsert()) {
             try {
                 static::$db->beginTransaction();
@@ -396,10 +393,11 @@ class Query {
         return $this;
     }
 
-    private function isMultiInsert(): bool
+    private function isMultiInsert($input_parameters = null): bool
     {
-        if (isset($this->insert)) {
-            return isset($this->insert[0]) && is_array($this->insert[0]);
+        $input_parameters ??= (isset($this->insert) ? $this->insert : null);
+        if ($input_parameters) {
+            return isset($input_parameters[0]) && is_array($input_parameters[0]);
         }
         return false;
     }
@@ -412,9 +410,8 @@ class Query {
         );
     }
 
-    public function compileQuery(string $type = null): string
+    public function compileQuery(string $type = null, $input_parameters = null): string
     {
-        $input_parameters = null;
         $type = $type ?? $this->type;
         switch ($type) {
             case 'COUNT':
@@ -428,14 +425,16 @@ class Query {
                 $sql = sprintf("DELETE FROM `%s`", $this->table);
             break;
             case 'INSERT':
-                $input_parameters = $this->insert;
+                if (is_null($input_parameters) && isset($this->insert)) {
+                    $input_parameters = $this->insert;
+                }
                 $sql = sprintf("INSERT INTO `%s` (", $this->table);
-                if ($this->isMultiInsert()) {
-                    foreach ($this->insert[0] as $key => $val) {
+                if ($this->isMultiInsert($input_parameters)) {
+                    foreach ($input_parameters[0] as $key => $val) {
                         $sql .= sprintf(" `%s`,", $key);
                     }
                 } else {
-                    foreach ($this->insert as $key => $val) {
+                    foreach ($input_parameters as $key => $val) {
                         $sql .= sprintf(" `%s`,", $key);
                     }
                 }
@@ -444,12 +443,12 @@ class Query {
                 $sql .= ') VALUES ';
 
                 $sql .= '(';
-                if ($this->isMultiInsert()) {
-                    foreach ($this->insert[0] as $key => $val) {
+                if ($this->isMultiInsert($input_parameters)) {
+                    foreach ($input_parameters[0] as $key => $val) {
                         $sql .= sprintf(" :%s,", $key);
                     }
                 } else {
-                    foreach ($this->insert as $key => $val) {
+                    foreach ($input_parameters as $key => $val) {
                         $sql .= sprintf(" :%s,", $key);
                     }
                 }
@@ -460,15 +459,17 @@ class Query {
                 $sql = sprintf("SELECT %s FROM `%s`", implode(', ', $this->select), $this->table);
             break;
             case 'UPDATE':
-                $input_parameters = $this->update;
+                if (is_null($input_parameters) && isset($this->update)) {
+                    $input_parameters = $this->update;
+                }
                 $sql = sprintf("UPDATE %s SET", $this->table);
-                foreach ($this->update as $key => $val) {
+                foreach ($input_parameters as $key => $val) {
                     $sql .= sprintf(" `%s` = :%s,", $key, $key);
                 }
-                if ($this->updateField) {
+                if (isset($this->updateField)) {
                     $sql .= ' `'.$this->updateField.'` = CURRENT_TIMESTAMP';
                 } else {
-                    $sql .= rtrim($sql, ',');
+                    $sql = rtrim($sql, ',');
                 }
             break;
         }

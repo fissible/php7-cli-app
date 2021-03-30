@@ -36,6 +36,10 @@ final class DatabaseTest extends TestCase
 
         $this->assertEquals('3', $result);
 
+        $result = Query::table('test')->where('name', 'Third')->update(['size' => 2]);
+
+        $this->assertTrue($result);
+
         $row = Query::table('test')
             ->where('name', 'Second')
             ->first();
