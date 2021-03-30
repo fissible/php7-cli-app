@@ -12,6 +12,8 @@ class Model
 
     protected static string $primaryKeyType = 'int';
 
+    protected static $casts = [];
+
     protected array $dates = [];
     
     protected static $dateFormat = 'U';
@@ -98,9 +100,47 @@ class Model
             $value = $this->attributes[$name];
         }
 
+        // Casting
         if (!is_null($value)) {
             if (in_array($name, array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD]))) {
-                $value = \DateTime::createFromFormat(static::$dateFormat, $value);
+                $value = \DateTime::createFromFormat(static::$dateFormat, (string) $value);
+            } elseif (array_key_exists($name, static::$casts)) {
+                switch (static::$casts[$name]) {
+                    case 'int':
+                    case 'integer':
+                        $value = (int) $value;
+                    break;
+                    case 'bool':
+                    case 'boolean':
+                        $value = (bool) $value;
+                    break;
+                    case 'float':
+                    case 'long':
+                    case 'short':
+                        $value = (float) $value;
+                    break;
+                    case 'string':
+                        $value = (string) $value;
+                    break;
+                    case 'array':
+                        if ($value[0] === '{' && $decoded = json_decode($value)) {
+                            $value = $decoded;
+                        } else {
+                            $value = (array) $value;
+                        }
+                    break;
+                    case 'date':
+                    case 'datetime':
+                        $value = \DateTime::createFromFormat(static::$dateFormat, (string) $value);
+                    break;
+                    default:
+                        $value = \DateTime::createFromFormat(static::$dateFormat, (string) $value);
+                        if (0 === strpos(static::$casts[$name], 'date') && false !== strpos(static::$casts[$name], ':')) {
+                            [$cast, $format] = explode(':', static::$casts[$name]);
+                            $value = $value->format($format);
+                        }
+                    break;
+                }
             }
         }
         

@@ -158,11 +158,10 @@ class Query {
     private function bindParameters(\PDOStatement $stmt, array $input_parameters)
     {
         foreach ($input_parameters as $key => $value) {
+            $param = \PDO::PARAM_STR;
             if (is_int($value)) $param = \PDO::PARAM_INT;
             elseif (is_bool($value)) $param = \PDO::PARAM_BOOL;
             elseif (is_null($value)) $param = \PDO::PARAM_NULL;
-            elseif (is_string($value)) $param = \PDO::PARAM_STR;
-            else $param = false;
                 
             if ($param !== false) $stmt->bindValue($key, $value, $param);
         }

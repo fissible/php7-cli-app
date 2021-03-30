@@ -246,6 +246,41 @@ final class ModelTest extends TestCase
         $this->assertEquals('AnotherName', $Model->getAttribute('name'));
     }
 
+    public function testFloatParam()
+    {
+        $db = $this->setUpDatabase();
+
+        $db->exec('CREATE TABLE IF NOT EXISTS test_table (
+            id INTEGER PRIMARY KEY,
+            settlement DATE NOT NULL,
+            quantity INTEGER NOT NULL,
+            price DECIMAL (10,2)
+        )');
+
+        $date = \DateTime::createFromFormat('Ymd', '20200218');
+        $settlementDate = $date->getTimestamp();
+        $quantity = '3539';
+        $price = '27.05';
+        $Model = new class([
+            'settlement' => $settlementDate,
+            'quantity' => (int) $quantity,
+            'price' => (float) $price
+        ]) extends Model {
+            protected static string $table = 'test_table';
+            protected static $casts = ['quantity' => 'int'];
+            protected array $dates = ['settlement'];
+        };
+
+        $this->assertEquals($date, $Model->settlement);
+        $this->assertEquals($quantity, $Model->quantity);
+        $this->assertTrue(is_int($Model->quantity));
+        $this->assertEquals(27.05, $Model->price);
+        $this->assertTrue($Model->insert());
+        $this->assertEquals($date, $Model->settlement);
+        $this->assertEquals(3539, $Model->quantity);
+        $this->assertEquals(27.05, $Model->price);
+    }
+
     public function tearDown(): void
     {
         $this->tearDownDatabase();
