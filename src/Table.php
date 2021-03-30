@@ -8,6 +8,8 @@ class Table
 
     private array $headers;
 
+    private array $alignment;
+
     private $maskDuplicateRowValues = false;
 
     private array $rows;
@@ -37,7 +39,7 @@ class Table
     {
         $this->app = $app;
         $this->buffer = new Buffer();
-        $this->headers = $headers;
+        $this->setHeaders($headers);
         $this->rows = $rows;
         $this->setOptions($options);
     }
@@ -168,6 +170,10 @@ class Table
             foreach ($this->rows as $y => $row) {
                 $this->printChar('left');
                 foreach ($headers as $x => $_header) {
+                    $alignment = 'L';
+                    if (isset($this->alignment) && isset($this->alignment[$x])) {
+                        $alignment = $this->alignment[$x];
+                    }
                     $width = $cellWidths[$x];
                     $prev_cell_value = null;
                     if ($y > 0 && isset($this->rows[$y - 1]) && isset($this->rows[$y - 1][$x])) {
@@ -180,7 +186,21 @@ class Table
                             $cell_value = trim(substr($cell_value, 0, 5)).'...';
                         }
                     }
-                    $this->buffer->print(str_pad(' ' . $cell_value, $width));
+                    switch ($alignment) {
+                        case 'L':
+                            $pad_type = STR_PAD_RIGHT;
+                            $cell_value = ' '.$cell_value;
+                        break;
+                        case 'R':
+                            $pad_type = STR_PAD_LEFT;
+                            $cell_value = $cell_value.' ';
+                        break;
+                        case 'C':
+                            $pad_type = STR_PAD_BOTH;
+                        break;
+                    }
+                    $pad_type = $alignment === 'L' ? STR_PAD_RIGHT : ($alignment === 'R' ? STR_PAD_LEFT : STR_PAD_BOTH);
+                    $this->buffer->print(str_pad((string) $cell_value, $width, ' ', $pad_type));
 
                     if ($x < ($cols - 1)) {
                         $this->printChar('middle');
@@ -209,6 +229,35 @@ class Table
         $this->printChar('bottom-right', true);
 
         return $this->buffer->flush();
+    }
+
+    public function setColumnAlignment(int $index, string $alignment = 'L')
+    {
+        $alignment = strtoupper($alignment[0]);
+        if (!in_array($alignment, ['L', 'R', 'C'])) {
+            throw new \InvalidArgumentException('Column alignment must be "L", "R", or "C".');
+        }
+        if (!isset($this->alignment)) {
+            $this->alignment = [];
+        }
+        $this->alignment[$index] = $alignment;
+        return $this;
+    }
+
+    public function setHeaders(array $headers = [])
+    {
+        $this->headers = [];
+        foreach ($headers as $x => $header) {
+            if ($header[0] === ' ' && $header[-1] === ' ') {
+                $this->setColumnAlignment($x, 'C');
+            } elseif ($header[0] === ' ') {
+                $this->setColumnAlignment($x, 'R');
+            } elseif ($header[-1] === ' ') {
+                $this->setColumnAlignment($x, 'L');
+            }
+            $this->headers[$x] = trim($header);
+        }
+        return $this;
     }
 
     /**
