@@ -4,7 +4,7 @@ namespace PhpCli\Models;
 
 use PhpCli\Database\Query;
 
-class Model implements \Serializable
+class Model implements \JsonSerializable, \Serializable
 {
     protected static string $table;
 
@@ -329,6 +329,25 @@ class Model implements \Serializable
         return false;
     }
 
+    public function jsonSerialize()
+    {
+        $attributes = [];
+        foreach ($this->attributes as $key => $value) {
+            if (in_array($key, $this->getDateFields())) {
+                $value = $this->serializeDate($value);
+            }
+            $attributes[$key] = $value;
+        }
+        foreach ($this->dirty as $key => $value) {
+            if (in_array($key, $this->getDateFields())) {
+                $value = $this->serializeDate($value);
+            }
+            $attributes[$key] = $value;
+        }
+
+        return $attributes;
+    }
+
     public function primaryKey()
     {
         if (isset($this->attributes[static::$primaryKey])) {
@@ -369,13 +388,13 @@ class Model implements \Serializable
             return $this->insert();
         }
     }
-    
+
     public function serialize()
     {
         $attributes = $this->attributes;
         $dirty = $this->dirty;
 
-        foreach ($this->dates as $dateField) {
+        foreach ($this->getDateFields() as $dateField) {
             if (isset($attributes[$dateField]) && $attributes[$dateField] instanceof \DateTime) {
                 $attributes[$dateField] = $this->serializeDate($attributes[$dateField]);
             }

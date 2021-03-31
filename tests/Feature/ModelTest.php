@@ -283,6 +283,25 @@ final class ModelTest extends TestCase
         $this->assertEquals(27.05, $Model->price);
     }
 
+    public function testJsonSerialization()
+    {
+        $date = \DateTime::createFromFormat('Ymd', '20200218');
+        $formattedDate = $date->format('Y-m-d\TH:i:sP');
+        $settlementDate = $date->getTimestamp();
+        $quantity = '3539';
+        $price = '27.05';
+        $Model = new TestModel([
+            'settlement' => $settlementDate,
+            'quantity' => (int) $quantity,
+            'price' => (float) $price
+        ]);
+
+        $expected = '{"settlement":"'.$formattedDate.'","quantity":3539,"price":27.05}';
+        $actual = json_encode($Model);
+
+        $this->assertEquals($expected, $actual);
+    }
+
     public function testSerialization()
     {
         $date = \DateTime::createFromFormat('Ymd', '20200218');
