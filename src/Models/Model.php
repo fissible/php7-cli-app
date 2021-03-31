@@ -39,8 +39,19 @@ class Model implements \Serializable
 
     private Query $query;
 
-    public function __construct(array $attributes = [], \PDO $db = null)
+    /**
+     * @param array|object $attributes
+     * @param \PDO|null $db
+     */
+    public function __construct($attributes = [], \PDO $db = null)
     {
+        if (is_object($attributes)) {
+            $attributes = get_object_vars($attributes);
+        }
+        if (!is_array($attributes)) {
+            throw new \InvalidArgumentException('Models must be hyrdated with an array or object with public properties.');
+        }
+
         $this->setAttributes($attributes);
         if ($db) {
             Query::setDriver($db);
@@ -69,12 +80,6 @@ class Model implements \Serializable
 
     public static function newInstance($attributes = []): Model
     {
-        if (is_object($attributes)) {
-            $attributes = get_object_vars($attributes);
-        }
-        if (!is_array($attributes)) {
-            throw new \InvalidArgumentException('Models must be hyrdated with an array or object with public properties.');
-        }
         return new static($attributes, static::getConnection());
     }
 
@@ -154,7 +159,9 @@ class Model implements \Serializable
         $exists = $this->exists();
 
         // Casting
-        $value = $this->castAttribute($name, $value);
+        if ($this->isCastable($name)) {
+            $value = $this->castAttribute($name, $value);
+        }
 
         if (!isset($this->attributes[$name])) {
             $this->attributes[$name] = null;
@@ -341,7 +348,7 @@ class Model implements \Serializable
     {
         static::getConnection();
 
-        if (!($this->exists())) {
+        if (!$this->exists()) {
             throw new \LogicException('Cannot refresh nonexistent model.');
         }
 
@@ -386,10 +393,10 @@ class Model implements \Serializable
 
         foreach ($this->dates as $dateField) {
             if (isset($attributes[$dateField])) {
-                $attributes[$dateField] = new \DateTime($attributes[$dateField]);
+                $attributes[$dateField] = $this->asDatetime($attributes[$dateField]);
             }
             if (isset($dirty[$dateField])) {
-                $dirty[$dateField] = new \DateTime($dirty[$dateField]);
+                $dirty[$dateField] = $this->asDatetime($dirty[$dateField]);
             }
         }
 
@@ -462,21 +469,20 @@ class Model implements \Serializable
             return \DateTime::createFromFormat('U', (string) $value);
         }
 
-        // Y-m-d H:i:s
-        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{2}):(\d{2}):(\d{2})$/', $value)) {
-            return \DateTime::createFromFormat('Y-m-d H:i:s', $value);
-        }
-
         // Y-m-d
         if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $value)) {
             return (\DateTime::createFromFormat('Y-m-d', $value))->setTime(0, 0);
         }
 
+        // Y-m-d H:i:s
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{2}):(\d{2}):(\d{2})$/', $value)) {
+            return \DateTime::createFromFormat('Y-m-d H:i:s', $value);
+        }
+
         if (static::$dateFormat) {
-            if (false === \DateTime::createFromFormat(static::$dateFormat, (string) $value)) {
-                var_dump($value);
+            if (false !== ($dateTime = \DateTime::createFromFormat(static::$dateFormat, (string) $value))) {
+                return $dateTime;
             }
-            return \DateTime::createFromFormat(static::$dateFormat, (string) $value);
         }
         
         return new \DateTime((string) $value);
@@ -485,6 +491,15 @@ class Model implements \Serializable
     protected function getDateFields(): array
     {
         return array_merge($this->dates, [static::UPDATED_FIELD, static::CREATED_FIELD]);
+    }
+
+    /**
+     * @param string $field
+     * @return bool
+     */
+    protected function isCastable(string $field): bool
+    {
+        return isset(static::$casts[$field]) || in_array($field, $this->getDateFields(), true);
     }
     
     /**
@@ -504,7 +519,14 @@ class Model implements \Serializable
     protected function setAttributes(array $attributes = [])
     {
         foreach ($attributes as $field => $value) {
-            $this->attributes[$field] = $this->castAttribute($field, $value);
+            if ($this->isCastable($field)) {
+                $this->attributes[$field] = $this->castAttribute($field, $value);
+            } elseif ($field === static::$primaryKey && static::$primaryKeyType === 'int') {
+                $this->attributes[$field] = (int) $value;
+            } else {
+                $this->attributes[$field] = $value;
+            }
+
             if (isset($this->dirty[$field]) && $this->dirty[$field] === $this->attributes[$field]) {
                 unset($this->dirty[$field]);
             }

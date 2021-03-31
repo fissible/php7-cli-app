@@ -153,6 +153,7 @@ final class ModelTest extends TestCase
         $this->assertFalse($Model->exists());
         $this->assertTrue($Model->insert());
         $this->assertTrue($Model->exists());
+        $this->assertTrue(is_int($Model->id));
 
         $this->assertEquals(date('Y-m-d H:i'), $Model->created_at->format('Y-m-d H:i'));
     }
