@@ -12,8 +12,6 @@ class PaginatedQuery
 
     private int $offset;
 
-    private string $table;
-
     private int $page;
 
     private int $pages;
@@ -30,7 +28,7 @@ class PaginatedQuery
             static::setDriver($db);
         }
 
-        if ($classNameOrTable instanceof \PhpCli\Models\Model) {
+        if (is_subclass_of($classNameOrTable, \PhpCli\Models\Model::class)) {
             $this->className = $classNameOrTable;
         }
 
@@ -80,17 +78,11 @@ class PaginatedQuery
     private function query(string $table = null)
     {
         if (!isset($this->query)) {
-            if (!is_null($table)) {
-                $this->table = $table;
-            }
-
             if (isset($this->className)) {
                 $this->query = call_user_func($this->className.'::query');
             } else {
-                if (!isset($this->table)) {
-                    throw new \RuntimeException('PaginatedQuery requires a Model class name or table name.');
-                }
-                $this->query = Query::table($this->table);
+                if (!$table) throw new \RuntimeException('PaginatedQuery requires a Model class name or table name.');
+                $this->query = Query::table($table);
             }
         }
         
