@@ -500,25 +500,28 @@ class Query {
             $sql .= ' WHERE '.$where;
         }
 
-        if (isset($this->order)) {
-            $sql .= ' ORDER BY ';
-            $orderBys = [];
-            foreach ($this->order as $key => $dir) {
-                if ($key[0] === '`' && $key[-1] === '`' && false !== strpos($key, '.') && substr_count($key, '`') === 2) {
-                    $key = str_replace('.', '`.`', $key);
+        if ($type !== 'COUNT') {
+            if (isset($this->order)) {
+                $sql .= ' ORDER BY ';
+                $orderBys = [];
+                foreach ($this->order as $key => $dir) {
+                    if ($key[0] === '`' && $key[-1] === '`' && false !== strpos($key, '.') && substr_count($key, '`') === 2) {
+                        $key = str_replace('.', '`.`', $key);
+                    }
+                    $orderBys[] = $key.($dir === 'DESC' ? ' DESC' : ' ASC');
                 }
-                $orderBys[] = $key.($dir === 'DESC' ? ' DESC' : ' ASC');
+                $sql .= implode(', ', $orderBys);
             }
-            $sql .= implode(', ', $orderBys);
-        }
 
-        if (isset($this->limit)) {
-            $sql .= sprintf(' LIMIT %d', $this->limit);
-        }
+            if (isset($this->limit)) {
+                $sql .= sprintf(' LIMIT %d', $this->limit);
+            }
 
-        if (isset($this->offset)) {
-            $sql .= sprintf(' OFFSET %d', $this->offset);
+            if (isset($this->offset)) {
+                $sql .= sprintf(' OFFSET %d', $this->offset);
+            }
         }
+        
 
         return $sql;
     }

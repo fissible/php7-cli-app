@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use PhpCli\Database\Query;
+use PhpCli\Database\PaginatedQuery;
 use Tests\TestCase;
 
 final class DatabaseTest extends TestCase
@@ -104,13 +105,15 @@ final class DatabaseTest extends TestCase
         
         $this->assertNull($row);
 
-        Query::table('test')->insert(['name' => 'Fourth', 'color' => 'Green', 'size' => 3]);
-        Query::table('test')->insert(['name' => 'Fifth', 'color' => 'Green', 'size' => 4]);
-        Query::table('test')->insert(['name' => 'Sixth', 'color' => 'Green', 'size' => 5]);
-        Query::table('test')->insert(['name' => 'Seventh', 'color' => 'Green', 'size' => 6]);
-        Query::table('test')->insert(['name' => 'Eight', 'color' => 'Yellow', 'size' => 7]);
-        Query::table('test')->insert(['name' => 'Ninth', 'color' => 'Green', 'size' => 8]);
-        Query::table('test')->insert(['name' => 'Tenth', 'color' => 'Green', 'size' => 9]);
+        Query::table('test')->insert([
+            ['name' => 'Fourth', 'color' => 'Green', 'size' => 3],
+            ['name' => 'Fifth', 'color' => 'Green', 'size' => 4],
+            ['name' => 'Sixth', 'color' => 'Green', 'size' => 5],
+            ['name' => 'Seventh', 'color' => 'Green', 'size' => 6],
+            ['name' => 'Eight', 'color' => 'Yellow', 'size' => 7],
+            ['name' => 'Ninth', 'color' => 'Green', 'size' => 8],
+            ['name' => 'Tenth', 'color' => 'Green', 'size' => 9]
+        ]);
 
         $rows = Query::table('test')
             ->whereBetween('size', [3, 5])
@@ -131,6 +134,32 @@ final class DatabaseTest extends TestCase
         $this->assertTrue($rows->contains('Eight'));
         $this->assertFalse($rows->contains('Ninth'));
         $this->assertFalse($rows->contains('Tenth'));
+    }
+
+    public function testPaginatedQuery()
+    {
+        Query::table('test')->insert([
+            ['name' => 'First', 'color' => 'red', 'size' => 1],
+            ['name' => 'Second', 'color' => null, 'size' => 2],
+            ['name' => 'Fourth', 'color' => 'Green', 'size' => 3],
+            ['name' => 'Fifth', 'color' => 'Green', 'size' => 4],
+            ['name' => 'Sixth', 'color' => 'Green', 'size' => 5],
+            ['name' => 'Seventh', 'color' => 'Green', 'size' => 6],
+            ['name' => 'Eight', 'color' => 'Yellow', 'size' => 7],
+            ['name' => 'Ninth', 'color' => 'Green', 'size' => 8]
+        ]);
+
+        $query = PaginatedQuery::table('test', 3);
+        $query->where('color', 'Green');
+
+        $rows = $query->get(1);
+
+        $this->assertEquals(2, $query->pages());
+        $this->assertCount(3, $rows);
+
+        $rows = $query->get(2);
+
+        $this->assertCount(2, $rows);
     }
 
     public function testQueryExe()
