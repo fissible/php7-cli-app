@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use PhpCli\Database\Query;
+use PhpCli\Database\PaginatedQuery;
 use PhpCli\Filesystem\File;
 use PhpCli\Models\Model;
 use Tests\TestCase;
@@ -281,6 +282,47 @@ final class ModelTest extends TestCase
         $this->assertEquals($date, $Model->settlement);
         $this->assertEquals(3539, $Model->quantity);
         $this->assertEquals(27.05, $Model->price);
+    }
+
+    public function testPaginatedQuery()
+    {
+        $db = $this->setUpDatabase();
+
+        $db->exec('CREATE TABLE IF NOT EXISTS test_table (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR (30) NOT NULL,
+            color VARCHAR (10),
+            size VARCHAR (10) NOT NULL
+        )');
+
+        Query::table('test_table')->insert([
+            ['name' => 'First', 'color' => 'red', 'size' => 1],
+            ['name' => 'Second', 'color' => null, 'size' => 2],
+            ['name' => 'Fourth', 'color' => 'Green', 'size' => 3],
+            ['name' => 'Fifth', 'color' => 'Green', 'size' => 4],
+            ['name' => 'Sixth', 'color' => 'Green', 'size' => 5],
+            ['name' => 'Seventh', 'color' => 'Green', 'size' => 6],
+            ['name' => 'Eight', 'color' => 'Yellow', 'size' => 7],
+            ['name' => 'Ninth', 'color' => 'Green', 'size' => 8]
+        ]);
+
+        $query = new PaginatedQuery(TestModel::class, 3);
+        $query->where('color', 'Green');
+
+        $rows = $query->get(1);
+
+        $this->assertEquals(5, $query->total());
+        $this->assertEquals(2, $query->pages());
+        $this->assertCount(3, $rows);
+        $this->assertTrue($rows->column('name')->contains('Fourth'));
+        $this->assertTrue($rows->column('name')->contains('Fifth'));
+        $this->assertTrue($rows->column('name')->contains('Sixth'));
+
+        $rows = $query->get(2);
+
+        $this->assertCount(2, $rows);
+        $this->assertTrue($rows->column('name')->contains('Seventh'));
+        $this->assertTrue($rows->column('name')->contains('Ninth'));
     }
 
     public function testJsonSerialization()

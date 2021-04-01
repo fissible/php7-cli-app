@@ -10,10 +10,6 @@ class PaginatedQuery
 
     private int $limit;
 
-    private int $offset;
-
-    private int $page;
-
     private int $pages;
 
     private int $perPage = 0;
@@ -30,9 +26,11 @@ class PaginatedQuery
 
         if (is_subclass_of($classNameOrTable, \PhpCli\Models\Model::class)) {
             $this->className = $classNameOrTable;
+            $this->query();
+        } else {
+            $this->query($classNameOrTable);
         }
 
-        $this->query($classNameOrTable);
         $this->perPage($perPage);
     }
 
@@ -59,13 +57,16 @@ class PaginatedQuery
         return $this;
     }
 
-    public function page(): int
-    {
-        return $this->page;
-    }
-
     public function pages(): int
     {
+        $total = $this->total();
+
+        if ($this->perPage) {
+            $this->pages = (int) ceil($total / $this->perPage);
+        } else {
+            $this->pages = 1;
+        }
+
         return $this->pages;
     }
 
@@ -91,22 +92,22 @@ class PaginatedQuery
 
     public function total(): int
     {
+        if (!isset($this->total)) {
+            $this->total = $this->query()->count();
+        }
+
         return $this->total;
     }
 
     public function get(int $page = 1)
     {
-        $this->page = $page;
-        $this->pages = 1;
-        $this->total = $this->query()->count();
+        if ($page < 1) throw new \InvalidArgumentException('Page cannot be less than 1.');
+
+        $this->total();
         
-        // LIMIT, OFFSET
         if ($this->perPage) {
-            $offset = ($this->page * $this->perPage) - $this->perPage;
             $this->query()->limit($this->perPage);
-            $this->pages = (int) ceil($this->total / $this->perPage);
-            
-            if ($offset) {
+            if ($offset = ($page * $this->perPage) - $this->perPage) {
                 $this->query()->offset($offset);
             }
         }

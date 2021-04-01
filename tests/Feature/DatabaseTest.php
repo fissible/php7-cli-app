@@ -154,12 +154,18 @@ final class DatabaseTest extends TestCase
 
         $rows = $query->get(1);
 
+        $this->assertEquals(5, $query->total());
         $this->assertEquals(2, $query->pages());
         $this->assertCount(3, $rows);
+        $this->assertTrue($rows->column('name')->contains('Fourth'));
+        $this->assertTrue($rows->column('name')->contains('Fifth'));
+        $this->assertTrue($rows->column('name')->contains('Sixth'));
 
         $rows = $query->get(2);
 
         $this->assertCount(2, $rows);
+        $this->assertTrue($rows->column('name')->contains('Seventh'));
+        $this->assertTrue($rows->column('name')->contains('Ninth'));
     }
 
     public function testQueryExe()
