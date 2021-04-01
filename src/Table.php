@@ -171,6 +171,7 @@ class Table
                     $cell_value = isset($row[$x]) ? $row[$x].'' : '';
                     $width = $cellWidths[$x];
                     $prev_cell_value = null;
+                    $alignment = is_string($header) ? null : $header->alignment();
 
                     if (is_null($cell_value)) {
                         $cell_value = 'NULL';
@@ -186,15 +187,16 @@ class Table
                         }
                     }
 
-                    switch ($header->alignment()) {
-                        case TableHeader::ALIGN_LEFT:
-                            $cell_value = str_pad(' '.$cell_value, $width, ' ', STR_PAD_RIGHT);
-                        break;
+                    switch ($alignment) {
                         case TableHeader::ALIGN_RIGHT:
                             $cell_value = str_pad($cell_value.' ', $width, ' ', STR_PAD_LEFT);
                         break;
                         case TableHeader::ALIGN_CENTER:
                             $cell_value = str_pad((string) $cell_value, $width, ' ', STR_PAD_BOTH);
+                        break;
+                        case TableHeader::ALIGN_LEFT:
+                        default:
+                            $cell_value = str_pad(' '.$cell_value, $width, ' ', STR_PAD_RIGHT);
                         break;
                     }
 
