@@ -8,8 +8,6 @@ class Table
 
     private array $headers;
 
-    private array $alignment;
-
     private $maskDuplicateRowValues = false;
 
     private array $rows;
@@ -104,10 +102,12 @@ class Table
             $printHeaders = true;
 
             foreach ($this->headers as $x => $header) {
-                $w = strlen($header) + 2;
+                $w = strlen($header.'') + 2;
                 if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
             }
         }
+
+        $lastColIndex = $cols - 1;
 
         foreach ($this->rows as $y => $row) {
             foreach ($row as $x => $col) {
@@ -126,12 +126,12 @@ class Table
         $char_top = $this->getChar('top');
         $char_top_mid = $this->getChar('top-mid');
         if ($char_top || $char_top_mid) {
-            foreach ($headers as $x => $header) {
+            foreach (array_keys($headers) as $x) {
                 $width = $cellWidths[$x];
                 if ($char_top) {
                     $this->buffer->print(str_repeat($char_top, $width));
                 }
-                if ($x < ($cols - 1) && $char_top_mid) {
+                if ($x < $lastColIndex && $char_top_mid) {
                     $this->buffer->print($char_top_mid);
                 }
             }
@@ -140,13 +140,11 @@ class Table
         $this->printChar('top-right', true);
 
         if ($printHeaders) {
-            // print headers: widths + count + 1
-
             $this->printChar('left');
             foreach ($headers as $x => $header) {
                 $width = $cellWidths[$x];
                 $this->buffer->print(str_pad(' ' . $header, $width));
-                if ($x < ($cols - 1)) {
+                if ($x < $lastColIndex) {
                     $this->printChar('middle');
                 }
             }
@@ -154,12 +152,12 @@ class Table
 
             // print header/body divider
             $this->printChar('left-mid');
-            foreach ($headers as $x => $header) {
+            foreach (array_keys($headers) as $x) {
                 $width = $cellWidths[$x];
                 if ($char = $this->getChar('mid')) {
                     $this->buffer->print(str_repeat($char, $width));
                 }
-                if ($x < ($cols - 1)) {
+                if ($x < $lastColIndex) {
                     $this->printChar('mid-mid');
                 }
             }
@@ -169,40 +167,40 @@ class Table
         if ($rowCount) {
             foreach ($this->rows as $y => $row) {
                 $this->printChar('left');
-                foreach ($headers as $x => $_header) {
-                    $alignment = 'L';
-                    if (isset($this->alignment) && isset($this->alignment[$x])) {
-                        $alignment = $this->alignment[$x];
-                    }
+                foreach ($headers as $x => $header) {
+                    $cell_value = isset($row[$x]) ? $row[$x].'' : '';
                     $width = $cellWidths[$x];
                     $prev_cell_value = null;
+
+                    if (is_null($cell_value)) {
+                        $cell_value = 'NULL';
+                    }
+
                     if ($y > 0 && isset($this->rows[$y - 1]) && isset($this->rows[$y - 1][$x])) {
                         $prev_cell_value = $this->rows[$y - 1][$x];
                     }
-                    $cell_value = isset($row[$x]) ? $row[$x] : '';
 
                     if (($this->maskDuplicateRowValues === true || is_array($this->maskDuplicateRowValues) && in_array($x, $this->maskDuplicateRowValues)) && !empty($prev_cell_value)) {
                         if (isset($row[$x]) && $row[$x] === $prev_cell_value && strlen($cell_value) > 7) {
                             $cell_value = trim(substr($cell_value, 0, 5)).'...';
                         }
                     }
-                    switch ($alignment) {
-                        case 'L':
-                            $pad_type = STR_PAD_RIGHT;
-                            $cell_value = ' '.$cell_value;
+
+                    switch ($header->alignment()) {
+                        case TableHeader::ALIGN_LEFT:
+                            $cell_value = str_pad(' '.$cell_value, $width, ' ', STR_PAD_RIGHT);
                         break;
-                        case 'R':
-                            $pad_type = STR_PAD_LEFT;
-                            $cell_value = $cell_value.' ';
+                        case TableHeader::ALIGN_RIGHT:
+                            $cell_value = str_pad($cell_value.' ', $width, ' ', STR_PAD_LEFT);
                         break;
-                        case 'C':
-                            $pad_type = STR_PAD_BOTH;
+                        case TableHeader::ALIGN_CENTER:
+                            $cell_value = str_pad((string) $cell_value, $width, ' ', STR_PAD_BOTH);
                         break;
                     }
-                    $pad_type = $alignment === 'L' ? STR_PAD_RIGHT : ($alignment === 'R' ? STR_PAD_LEFT : STR_PAD_BOTH);
-                    $this->buffer->print(str_pad((string) $cell_value, $width, ' ', $pad_type));
 
-                    if ($x < ($cols - 1)) {
+                    $this->buffer->print($cell_value);
+
+                    if ($x < $lastColIndex) {
                         $this->printChar('middle');
                     }
                 }
@@ -217,12 +215,12 @@ class Table
 
         // Print bottom border
         $this->printChar('bottom-left');
-        foreach ($headers as $x => $header) {
+        foreach (array_keys($headers) as $x) {
             $width = $cellWidths[$x];
             if ($char = $this->getChar('bottom')) {
                 $this->buffer->print(str_repeat($char, $width));
             }
-            if ($x < ($cols - 1)) {
+            if ($x < $lastColIndex) {
                 $this->printChar('bottom-mid');
             }
         }
@@ -237,10 +235,10 @@ class Table
         if (!in_array($alignment, ['L', 'R', 'C'])) {
             throw new \InvalidArgumentException('Column alignment must be "L", "R", or "C".');
         }
-        if (!isset($this->alignment)) {
-            $this->alignment = [];
+        if (!isset($this->headers[$index])) {
+            throw new \InvalidArgumentException(sprintf('No header exists for index "%d"', $index));
         }
-        $this->alignment[$index] = $alignment;
+        $this->headers[$index]->setAlignment($alignment);
         return $this;
     }
 
@@ -248,14 +246,10 @@ class Table
     {
         $this->headers = [];
         foreach ($headers as $x => $header) {
-            if ($header[0] === ' ' && $header[-1] === ' ') {
-                $this->setColumnAlignment($x, 'C');
-            } elseif ($header[0] === ' ') {
-                $this->setColumnAlignment($x, 'R');
-            } elseif ($header[-1] === ' ') {
-                $this->setColumnAlignment($x, 'L');
+            if (!($header instanceof TableHeader)) {
+                $header = new TableHeader($header);
             }
-            $this->headers[$x] = trim($header);
+            $this->headers[$x] = $header;
         }
         return $this;
     }
@@ -316,7 +310,7 @@ class Table
             $cellWidths = array_fill(0, $cols, 0);
 
             foreach ($this->headers as $x => $header) {
-                $w = strlen($header) + 2;
+                $w = strlen($header.'') + 2;
                 if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
             }
         }
