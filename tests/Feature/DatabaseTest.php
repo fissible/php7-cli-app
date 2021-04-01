@@ -276,6 +276,26 @@ final class DatabaseTest extends TestCase
         $this->assertEquals($albumsLengths[6], $rows->get(1)->length);
     }
 
+    public function testToString()
+    {
+        $query = Query::table('users')->as('a')
+            ->select('users.*')
+            ->join(Query::table('users')
+                ->select('username', 'email', 'COUNT(*)')
+                ->groupBy('username', 'email')
+                ->having('COUNT(*)', '>', 1),
+                'users.username', 'b.username')->as('b')
+            ->orderBy('users.email');
+        
+        $expected = 'SELECT users.* FROM `users` AS a ';
+        $expected .= 'INNER JOIN (';
+        $expected .= 'SELECT username, email, COUNT(*) FROM `users` GROUP BY username, email HAVING COUNT(*) > :HAVING1';
+        $expected .= ') AS b ON users.username = b.username ORDER BY users.email ASC;';
+        $actual = $query.';';
+        
+        $this->assertEquals($expected, $actual);
+    }
+
     public function tearDown(): void
     {
         $this->tearDownDatabase();

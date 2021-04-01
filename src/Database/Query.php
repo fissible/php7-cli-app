@@ -11,6 +11,8 @@ class Query {
 
     protected string $table;
 
+    protected string $alias;
+
     protected array $group;
 
     protected array $having = [];
@@ -65,6 +67,18 @@ class Query {
     {
         foreach (func_get_args() as $field) {
             $this->select[] = $field;
+        }
+        return $this;
+    }
+
+    public function as(string $alias): self
+    {
+        if (isset($this->join) && !empty($this->join)) {
+            end($this->join);
+            $this->join[key($this->join)]['as'] = $alias;
+            reset($this->join);
+        } else {
+            $this->alias = $alias;
         }
         return $this;
     }
@@ -212,12 +226,13 @@ class Query {
     /**
      * @param string $field
      */
-    public function groupBy(string $field): self
+    public function groupBy(): self
     {
+        $args = func_get_args();
         if (!isset($this->group)) {
             $this->group = [];
         }
-        $this->group[] = $field;
+        $this->group = array_merge($this->group, $args);
         return $this;
     }
 
@@ -271,28 +286,28 @@ class Query {
         return static::$db->lastInsertId();
     }
 
-    public function innerJoin(string $table, string $localKey, string $foreignKey): self
+    public function innerJoin($table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'INNER');
     }
 
-    public function join(string $table, string $localKey, string $foreignKey, $type = 'INNER'): self
+    public function join($table, string $localKey, string $foreignKey, $type = 'INNER'): self
     {
         $this->join[] = [$type, $table, $localKey, $foreignKey];
         return $this;
     }
 
-    public function leftJoin(string $table, string $localKey, string $foreignKey): self
+    public function leftJoin($table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'LEFT');
     }
 
-    public function outerJoin(string $table, string $localKey, string $foreignKey): self
+    public function outerJoin($table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'OUTER');
     }
 
-    public function rightJoin(string $table, string $localKey, string $foreignKey): self
+    public function rightJoin($table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'RIGHT');
     }
@@ -490,17 +505,31 @@ class Query {
         return $sql;
     }
 
-    private function compileJoin(array $join)
+    /**
+     * @param array $join
+     * @return string
+     */
+    private function compileJoin(array $join): string
     {
+        $table = $join[1];
+
+        if ($table instanceof Query) {
+            $table = '('.$table.')';
+        }
+
+        if (isset($join['as'])) {
+            $table .= ' AS '.$join['as'];
+        }
+
         return sprintf(
             '%s JOIN %s ON %s = %s',
-            $join[0], $join[1], $join[2], $join[3]
+            $join[0], $table, $join[2], $join[3]
         );
     }
 
     public function compileQuery(string $type = null, $input_parameters = null): string
     {
-        $type = $type ?? $this->type;
+        $type = $type ?? $this->type ?? 'SELECT';
         switch ($type) {
             case 'COUNT':
                 if (count($this->select) === 1 && $this->select[0] === '*') {
@@ -508,15 +537,27 @@ class Query {
                 } else {
                     $sql = sprintf("SELECT  COUNT(*), %s FROM `%s`", implode(', ', $this->select), $this->table);
                 }
+                if (isset($this->alias)) {
+                    $sql .= ' AS '.$this->alias;
+                }
             break;
             case 'DELETE':
                 $sql = sprintf("DELETE FROM `%s`", $this->table);
+                if (isset($this->alias)) {
+                    $sql .= ' AS '.$this->alias;
+                }
             break;
             case 'INSERT':
                 if (is_null($input_parameters) && isset($this->insert)) {
                     $input_parameters = $this->insert;
                 }
-                $sql = sprintf("INSERT INTO `%s` (", $this->table);
+
+                if (isset($this->alias)) {
+                    $sql = sprintf("INSERT INTO `%s` AS %s (", $this->table, $this->alias);
+                } else {
+                    $sql = sprintf("INSERT INTO `%s` (", $this->table);
+                }
+                
                 if ($this->isMultiInsert($input_parameters)) {
                     foreach ($input_parameters[0] as $key => $val) {
                         $sql .= sprintf(" `%s`,", $key);
@@ -552,12 +593,21 @@ class Query {
             break;
             case 'SELECT':
                 $sql = sprintf("SELECT %s FROM `%s`", implode(', ', $this->select), $this->table);
+                if (isset($this->alias)) {
+                    $sql .= ' AS '.$this->alias;
+                }
             break;
             case 'UPDATE':
                 if (is_null($input_parameters) && isset($this->update)) {
                     $input_parameters = $this->update;
                 }
-                $sql = sprintf("UPDATE %s SET", $this->table);
+
+                if (isset($this->alias)) {
+                    $sql = sprintf("UPDATE `%s` AS %s SET", $this->table, $this->alias);
+                } else {
+                    $sql = sprintf("UPDATE `%s` SET", $this->table);
+                }
+
                 foreach ($input_parameters as $key => $val) {
                     $sql .= sprintf(" `%s` = :%s,", $key, $key);
                 }
@@ -611,6 +661,11 @@ class Query {
         
 
         return $sql;
+    }
+
+    public function __toString(): string
+    {
+        return $this->compileQuery();
     }
 
     private function compileWhere(bool $enclose = false, int &$param_key = 0): string
