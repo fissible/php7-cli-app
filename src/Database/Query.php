@@ -11,6 +11,10 @@ class Query {
 
     protected string $table;
 
+    protected array $group;
+
+    protected array $having = [];
+
     protected array $insert;
 
     protected array $join = [];
@@ -32,8 +36,6 @@ class Query {
     protected ?string $updatedField;
 
     protected array $where = [];
-
-    private int $param_key = 0;
 
     public function __construct(\PDO $db = null)
     {
@@ -115,12 +117,13 @@ class Query {
 
         // WHERE IN variables
         $where_params = $this->getWhereParameters();
+        $having_params = $this->getHavingParameters();
 
         if ($this->isMultiInsert()) {
             try {
                 static::$db->beginTransaction();
                 foreach ($this->insert as $input_parameters) {
-                    $parameters = array_merge($input_parameters, $where_params);
+                    $parameters = array_merge($input_parameters, $where_params, $having_params);
                     $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
                     $result = $stmt->execute();
                 }
@@ -130,7 +133,7 @@ class Query {
                 throw $e;
             }
         } else {
-            $parameters = array_merge($input_parameters, $where_params);
+            $parameters = array_merge($input_parameters, $where_params, $having_params);
             $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
             $result = $stmt->execute();
         }
@@ -155,7 +158,7 @@ class Query {
             var_dump($this->compileQuery());
             throw $e;
         }
-        // $stmt = static::$db->prepare($sql);
+
         if (!$stmt) {
             $error = static::$db->errorInfo();
             throw new QueryException($error[2], $error[0], $error[1]);
@@ -163,7 +166,7 @@ class Query {
         return $stmt;
     }
 
-    private function bindParameters(\PDOStatement $stmt, array $input_parameters)
+    private function bindParameters(\PDOStatement $stmt, array $input_parameters): \PDOStatement
     {
         foreach ($input_parameters as $key => $value) {
             $param = \PDO::PARAM_STR;
@@ -191,7 +194,7 @@ class Query {
         return $result;
     }
 
-    public function get()
+    public function get(): Collection
     {
         $this->type = 'SELECT';
         $statement = $this->exe($this->compileQuery());
@@ -204,6 +207,50 @@ class Query {
             $result = null;
         }
         return new Collection($result);
+    }
+
+    /**
+     * @param string $field
+     */
+    public function groupBy(string $field): self
+    {
+        if (!isset($this->group)) {
+            $this->group = [];
+        }
+        $this->group[] = $field;
+        return $this;
+    }
+
+    /**
+     * Add a HAVING criteria.
+     */
+    public function having(): self
+    {
+        $args = func_get_args();
+        $operator = null;
+        $value = null;
+
+        if (count($args) === 1) {
+            throw new \InvalidArgumentException('Method requires at least two parameters.');
+        }
+
+        if (count($args) > 1) {
+            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
+            $value = count($args) > 2 ? $args[2] : $args[1];
+
+            // `column` IS NULL || `column` IS NOT NULL
+            if ($value === null && !in_array($operator, ['IS', 'IS NOT'])) {
+                if ($operator === '=') {
+                    $operator = 'IS';
+                } elseif ($operator === '!=' || $operator === '<>') {
+                    $operator = 'IS NOT';
+                } else {
+                    throw new \InvalidArgumentException(sprintf('Invalid operator "%s" for NULL value.', $operator));
+                }
+            }
+        }
+
+        return $this->addHaving($args[0], $operator, $value);
     }
 
     /**
@@ -224,7 +271,7 @@ class Query {
         return static::$db->lastInsertId();
     }
 
-    public function innerJoin(string $table, string $localKey, string $foreignKey)
+    public function innerJoin(string $table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'INNER');
     }
@@ -235,17 +282,17 @@ class Query {
         return $this;
     }
 
-    public function leftJoin(string $table, string $localKey, string $foreignKey)
+    public function leftJoin(string $table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'LEFT');
     }
 
-    public function outerJoin(string $table, string $localKey, string $foreignKey)
+    public function outerJoin(string $table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'OUTER');
     }
 
-    public function rightJoin(string $table, string $localKey, string $foreignKey)
+    public function rightJoin(string $table, string $localKey, string $foreignKey): self
     {
         return $this->join($table, $localKey, $foreignKey, $type = 'RIGHT');
     }
@@ -281,7 +328,7 @@ class Query {
         return $this;
     }
 
-    public function orderBy(string $field, string $dir = 'ASC')
+    public function orderBy(string $field, string $dir = 'ASC'): self
     {
         if (!isset($this->order)) {
             $this->order = [];
@@ -297,7 +344,7 @@ class Query {
         return $this;
     }
 
-    public function setTable(string $table)
+    public function setTable(string $table): self
     {
         $this->table = $table;
         return $this;
@@ -376,7 +423,7 @@ class Query {
     /**
      * Inclusive; BETWEEN 3 AND 5 yields 3, 4, 5
      */
-    public function whereBetween(string $column, array $values, string $conjunction = 'AND')
+    public function whereBetween(string $column, array $values, string $conjunction = 'AND'): self
     {
         return $this->addWhere(strtoupper($conjunction), $column, 'BETWEEN', $values);
     }
@@ -396,7 +443,13 @@ class Query {
         return $this->addWhere('AND', $column, 'NOT IN', $values);
     }
 
-    private function addWhere(string $conjunction, $column, $operator = null, $value = null)
+    private function addHaving(string $column, $operator = null, $value = null): self
+    {
+        $this->having[] = [$column, $operator, $value];
+        return $this;
+    }
+
+    private function addWhere(string $conjunction, $column, $operator = null, $value = null): self
     {
         $this->where[] = [$conjunction, $column, $operator, $value];
         return $this;
@@ -409,6 +462,32 @@ class Query {
             return isset($input_parameters[0]) && is_array($input_parameters[0]);
         }
         return false;
+    }
+
+    /**
+     * Compile the HAVING clause.
+     * @return string
+     */
+    private function compileHaving(): string
+    {
+        $sql = '';
+
+        if (!empty($this->having)) {
+            $param_key = 0;
+            foreach ($this->having as $key => $having) {
+                if (is_callable($having[0])) {
+                    throw new \InvalidArgumentException('HAVING cannot be compile from a callable.');
+                }
+                if ($key > 0) $sql .= ', ';
+                $param_key + $key;
+                array_unshift($having, 'HAVING');
+                list($havingSql, $input_parameters) = $this->compileWhereCriteria($having, $param_key);
+                $this->having[$key][3] = $input_parameters;
+                $sql .= $havingSql;
+            }
+        }
+
+        return $sql;
     }
 
     private function compileJoin(array $join)
@@ -500,6 +579,14 @@ class Query {
             $sql .= ' WHERE '.$where;
         }
 
+        if (isset($this->group)) {
+            $sql .= ' GROUP BY '.implode(', ', $this->group);
+        }
+
+        if ($having = $this->compileHaving()) {
+            $sql .= ' HAVING '.$having;
+        }
+
         if ($type !== 'COUNT') {
             if (isset($this->order)) {
                 $sql .= ' ORDER BY ';
@@ -551,7 +638,7 @@ class Query {
         return $sql;
     }
 
-    private function compileWhereCriteria($where, int &$param_key = 0)
+    private function compileWhereCriteria($where, int &$param_key = 0): array
     {
         $conjunction = $where[0];
 
@@ -604,7 +691,21 @@ class Query {
     /**
      * @return array
      */
-    private function getWhereParameters()
+    private function getHavingParameters(): array
+    {
+        $parameters = [];
+        foreach ($this->having as $having) {
+            if (isset($having[3]) && !empty($having[3])) {
+                $parameters = array_merge($parameters, $having[3]);
+            }
+        }
+        return $parameters;
+    }
+
+    /**
+     * @return array
+     */
+    private function getWhereParameters(): array
     {
         $parameters = [];
         foreach ($this->where as $where) {
