@@ -276,10 +276,23 @@ final class DatabaseTest extends TestCase
         $this->assertEquals($albumsLengths[6], $rows->get(1)->length);
     }
 
+    public function testWhereParams()
+    {
+        $query = Query::table('users')
+            ->where('current', '<', '`max`')
+            ->whereIn('status', ['`prior_status`', '`next_status`'])
+            ->whereBetween('current', ['`max`', '`min`']);
+
+        $expected = 'SELECT * FROM `users` WHERE current < `max` AND status IN (`prior_status`, `next_status`) AND current BETWEEN `max` AND `min`;';
+        $actual = $query.';';
+
+        $this->assertEquals($expected, $actual);
+    }
+
     public function testToString()
     {
         $query = Query::table('users')->as('a')
-            ->select('users.*')
+            ->select('a.*')
             ->join(Query::table('users')
                 ->select('username', 'email', 'COUNT(*)')
                 ->groupBy('username', 'email')
@@ -287,7 +300,7 @@ final class DatabaseTest extends TestCase
                 'users.username', 'b.username')->as('b')
             ->orderBy('users.email');
         
-        $expected = 'SELECT users.* FROM `users` AS a ';
+        $expected = 'SELECT a.* FROM `users` AS a ';
         $expected .= 'INNER JOIN (';
         $expected .= 'SELECT username, email, COUNT(*) FROM `users` GROUP BY username, email HAVING COUNT(*) > :HAVING1';
         $expected .= ') AS b ON users.username = b.username ORDER BY users.email ASC;';

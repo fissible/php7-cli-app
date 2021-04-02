@@ -369,7 +369,7 @@ class Query {
     {
         $args = func_get_args();
         if (count($args) === 1) {
-            if (!is_callable($args[0])) throw new \InvalidArgumentException('Single parameter must be a callable.');
+            if (!(is_object($args[0]) && ($args[0] instanceof \Closure))) throw new \InvalidArgumentException('Single parameter must be a callable.');
             
             $this->where[] = ['OR', $args[0], null, null];
         } else {
@@ -490,7 +490,7 @@ class Query {
         if (!empty($this->having)) {
             $param_key = 0;
             foreach ($this->having as $key => $having) {
-                if (is_callable($having[0])) {
+                if (is_object($having[0]) && $having[0] instanceof \Closure) {
                     throw new \InvalidArgumentException('HAVING cannot be compile from a callable.');
                 }
                 if ($key > 0) $sql .= ', ';
@@ -678,7 +678,7 @@ class Query {
             }
 
             foreach ($this->where as $key => $where) {
-                if ($key > 0) $sql .= ' '.$where[0].' ';
+                if ($key > 0) $sql .= ' '.$where[0].' '; // AND|OR
                 $param_key + $key;
                 list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, $param_key);
                 $this->where[$key][4] = $input_parameters;
@@ -697,7 +697,7 @@ class Query {
     {
         $conjunction = $where[0];
 
-        if (is_callable($where[1])) {
+        if (is_object($where[1]) && $where[1] instanceof \Closure) {
             $query = new static(static::$db);
             $where[1]($query);
             $sql = $query->compileWhere(true, $param_key);
@@ -712,29 +712,48 @@ class Query {
             if (in_array($operator, ['IN', 'NOT IN'])) {
                 $in = '';
                 foreach ($value as $item) {
-                    $param_key++;
-                    $key = ':'.(str_replace(' ', '_', $operator)).$param_key;
-                    $in .= "$key, ";
-                    $input_parameters[$key] = $item;
+                    if (!is_string($item) || $item[0] !== '`') {
+                        $param_key++;
+                        $key = ':'.(str_replace(' ', '_', $operator)).$param_key;
+                        $in .= "$key, ";
+                        $input_parameters[$key] = $item;
+                    } else {
+                        $in .= "$item, ";
+                    }
                 }
                 $value = '('.rtrim(trim($in), ',').')';
             } elseif($operator === 'BETWEEN') {
                 $value = array_values($value);
-                $keyFrom = $operator.(++$param_key);
-                $keyTo = $operator.(++$param_key);
-                $input_parameters[':'.$keyFrom] = $value[0];
-                $input_parameters[':'.$keyTo] = $value[1];
-                $value = sprintf(':%s AND :%s', $keyFrom, $keyTo);
+                $values = [];
+
+                if (!is_string($value[0]) || $value[0][0] !== '`') {
+                    $keyFrom = $operator.(++$param_key);
+                    $input_parameters[':'.$keyFrom] = $value[0];
+                    $values[] = ':'.$keyFrom;
+                } else {
+                    $values[] = $value[0];
+                }
+
+                if (!is_string($value[1]) || $value[1][0] !== '`') {
+                    $keyTo = $operator.(++$param_key);
+                    $input_parameters[':'.$keyTo] = $value[1];
+                    $values[] = ':'.$keyTo;
+                } else {
+                    $values[] = $value[1];
+                }
+                
+                $value = implode(' AND ', $values);
             } else {
                 throw new \InvalidArgumentException(sprintf('Invalid WHERE criteria value "%s', gettype($value)));
             }
-        } else {
+        } elseif (!is_string($value) || $value[0] !== '`') {
             $param_key++;
             $key = ':'.$conjunction.$param_key;
             $input_parameters[$key] = $value;
             $value = $key;
         }
 
+        // `table.field` -> `table`.`field`
         $column = $where[1];
         if ($column[0] === '`' && $column[-1] === '`' && false !== strpos($column, '.') && substr_count($column, '`') === 2) {
             $column = str_replace('.', '`.`', $column);
