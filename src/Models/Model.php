@@ -134,7 +134,7 @@ class Model implements \JsonSerializable, \Serializable
     /**
      * @return string
      */
-    public function getDateFormat(): string
+    public static function getDateFormat(): string
     {
         if (isset(static::$dateFormat)) {
             return static::$dateFormat;
