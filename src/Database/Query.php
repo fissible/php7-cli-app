@@ -393,71 +393,58 @@ class Query {
     public function orWhere(): self
     {
         $args = func_get_args();
+        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
+
         if (count($args) === 1) {
-            if (!(is_object($args[0]) && ($args[0] instanceof \Closure))) throw new \InvalidArgumentException('Single parameter must be a callable.');
-            
-            $this->where[] = ['OR', $args[0], null, null];
+            $this->addWhere('OR', $args[0]);
         } else {
-            $column = $args[0];
-            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
-            $value = count($args) > 2 ? $args[2] : $args[1];
-
-            if ($value === null) {
-                if (!in_array($operator, ['IS', 'NOT'])) {
-                    if ($operator !== '=') {
-                        $operator = 'NOT';
-                    } else {
-                        $operator = 'IS';
-                    }
-                }
-            }
-
-            $this->where[] = ['OR', $column, $operator, $value];
+            $this->addWhere('OR', $column, $operator, $value);
         }
-        
 
         return $this;
+    }
+
+    /**
+     * Convert value into SQL date for comparison.
+     */
+    public function orWhereDate(): self
+    {
+        $args = func_get_args();
+        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
+
+        if (is_int($value)) {
+            $value = \DateTime::createFromFormat('U');
+        }
+        if ($value instanceof \DateTime) {
+            $value = $value->format('Y-m-d');
+        }
+
+        // sqlite specific
+        return $this->addWhere('OR', sprintf('date(%s, \'unixepoch\')', $column), $operator, $value);
     }
 
     public function orWhereIn(string $column, array $values): self
     {
-        $this->where[] = ['OR', $column, 'IN', $values];
-        return $this;
+        return $this->addWhere('OR', $column, 'IN', $values);
     }
 
     public function orWhereNotIn(string $column, array $values): self
     {
-        $this->where[] = ['OR', $column, 'NOT IN', $values];
-        return $this;
+        return $this->addWhere('OR', $column, 'NOT IN', $values);
     }
 
     public function where(): self
     {
         $args = func_get_args();
-        $operator = null;
-        $value = null;
+        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
 
-        if (count($args) === 1 && !is_callable($args[0])) {
-            throw new \InvalidArgumentException('Single parameter must be a callable.');
+        if (count($args) === 1) {
+            $this->addWhere('AND', $args[0]);
+        } else {
+            $this->addWhere('AND', $column, $operator, $value);
         }
 
-        if (count($args) > 1) {
-            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
-            $value = count($args) > 2 ? $args[2] : $args[1];
-
-            // `column` IS NULL || `column` IS NOT NULL
-            if ($value === null && !in_array($operator, ['IS', 'IS NOT'])) {
-                if ($operator === '=') {
-                    $operator = 'IS';
-                } elseif ($operator === '!=' || $operator === '<>') {
-                    $operator = 'IS NOT';
-                } else {
-                    throw new \InvalidArgumentException(sprintf('Invalid operator "%s" for NULL value.', $operator));
-                }
-            }
-        }
-
-        return $this->addWhere('AND', $args[0], $operator, $value);
+        return $this;
     }
 
     /**
@@ -466,6 +453,25 @@ class Query {
     public function whereBetween(string $column, array $values, string $conjunction = 'AND'): self
     {
         return $this->addWhere(strtoupper($conjunction), $column, 'BETWEEN', $values);
+    }
+
+    /**
+     * Convert value into SQL date for comparison.
+     */
+    public function whereDate(): self
+    {
+        $args = func_get_args();
+        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
+
+        if (is_int($value)) {
+            $value = \DateTime::createFromFormat('U');
+        }
+        if ($value instanceof \DateTime) {
+            $value = $value->format('Y-m-d');
+        }
+
+        // sqlite specific
+        return $this->addWhere('AND', sprintf('date(%s, \'unixepoch\')', $column), $operator, $value);
     }
 
     public function whereIn(string $column, array $values): self
@@ -493,6 +499,38 @@ class Query {
     {
         $this->where[] = [$conjunction, $column, $operator, $value];
         return $this;
+    }
+
+    /**
+     * From 2 or 3 arguments return column, operator and value(s).
+     */
+    private function expandColumnOperatorValue()
+    {
+        $args = func_get_args();
+        $operator = null;
+        $value = null;
+
+        if (count($args) === 1 && !is_callable($args[0])) {
+            throw new \InvalidArgumentException('Single parameter must be a callable.');
+        }
+
+        if (count($args) > 1) {
+            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
+            $value = count($args) > 2 ? $args[2] : $args[1];
+
+            // `column` IS NULL || `column` IS NOT NULL
+            if ($value === null && !in_array($operator, ['IS', 'IS NOT'])) {
+                if ($operator === '=') {
+                    $operator = 'IS';
+                } elseif ($operator === '!=' || $operator === '<>') {
+                    $operator = 'IS NOT';
+                } else {
+                    throw new \InvalidArgumentException(sprintf('Invalid operator "%s" for NULL value.', $operator));
+                }
+            }
+        }
+
+        return [$args[0], $operator, $value];
     }
 
     private function isMultiInsert($input_parameters = null): bool
