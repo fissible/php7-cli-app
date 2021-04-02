@@ -121,21 +121,12 @@ class Query {
         if (!isset(static::$db)) {
             throw new \RuntimeException('No PDO driver available.');
         }
-        
-        $input_parameters = [];
-        if (substr($sql, 0, 6) === 'INSERT' && isset($this->insert)) {
-            $input_parameters = $this->insert;
-        } elseif (substr($sql, 0, 6) === 'UPDATE' && isset($this->update)) {
-            $input_parameters = $this->update;
-        }
-
-        // WHERE IN variables
-        $where_params = $this->getWhereParameters();
-        $having_params = $this->getHavingParameters();
 
         if ($this->isMultiInsert()) {
+            $where_params = $this->getWhereParameters();
+            $having_params = $this->getHavingParameters();
+            static::$db->beginTransaction();
             try {
-                static::$db->beginTransaction();
                 foreach ($this->insert as $input_parameters) {
                     $parameters = array_merge($input_parameters, $where_params, $having_params);
                     $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
@@ -147,8 +138,7 @@ class Query {
                 throw $e;
             }
         } else {
-            $parameters = array_merge($input_parameters, $where_params, $having_params);
-            $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
+            $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams($sql));
             $result = $stmt->execute();
         }
         
@@ -162,6 +152,41 @@ class Query {
         }
 
         return $result;
+    }
+
+    /**
+     * @return array
+     */
+    public function getParams(string $sql = null): array
+    {
+        $input_parameters = [];
+        if (is_null($sql)) {
+            $sql = $this->compileQuery();
+        }
+        $where_params = $this->getWhereParameters();
+        $having_params = $this->getHavingParameters();
+        if (substr($sql, 0, 6) === 'INSERT' && isset($this->insert)) {
+            $input_parameters = $this->insert;
+        } elseif (substr($sql, 0, 6) === 'UPDATE' && isset($this->update)) {
+            $input_parameters = $this->update;
+        }
+
+        return array_merge($input_parameters, $where_params, $having_params);
+    }
+
+    /**
+     * Get the query SQL with parameters substituted for placeholders. Not intended for subsequent execution.
+     * 
+     * @return string
+     */
+    public function getSql(): string
+    {
+        $sql = $this->compileQuery();
+        $params = $this->getParams($sql);
+        foreach ($params as $key => $value) {
+            $sql = str_replace($key, $value, $sql);
+        }
+        return $sql;
     }
 
     private function prepareStatement(string $sql): \PDOStatement
