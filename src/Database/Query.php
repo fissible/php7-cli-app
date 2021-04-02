@@ -194,7 +194,6 @@ class Query {
         try {
             $stmt = static::$db->prepare($sql);
         } catch (\PDOException $e) {
-            var_dump($this->compileQuery());
             throw $e;
         }
 
