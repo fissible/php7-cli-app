@@ -260,7 +260,7 @@ final class DatabaseTest extends TestCase
             ->innerJoin('albums', 'albums.albumid', 'tracks.albumid')
             ->groupBy('tracks.albumid')
             ->having('length', '>', 600000000);
-        
+
         $rows = $query->get();
 
         $albumsLengths = [];
@@ -269,7 +269,7 @@ final class DatabaseTest extends TestCase
                 return $track['albumid'] === $i;
             }), 'milliseconds'));
         }
-        
+
         $this->assertEquals(5, $rows->get(0)->albumid);
         $this->assertEquals(6, $rows->get(1)->albumid);
         $this->assertEquals($albumsLengths[5], $rows->get(0)->length);
@@ -279,11 +279,11 @@ final class DatabaseTest extends TestCase
     public function testWhereParams()
     {
         $query = Query::table('users')
-            ->where('current', '<', '`max`')
-            ->whereIn('status', ['`prior_status`', '`next_status`'])
-            ->whereBetween('current', ['`max`', '`min`']);
+            ->where('current', '<', Query::raw('max'))
+            ->whereIn('status', [Query::raw('prior_status'), Query::raw('next_status')])
+            ->whereBetween('current', [Query::raw('max'), Query::raw('min')]);
 
-        $expected = 'SELECT * FROM `users` WHERE current < `max` AND status IN (`prior_status`, `next_status`) AND current BETWEEN `max` AND `min`;';
+        $expected = 'SELECT * FROM users WHERE current < max AND status IN (prior_status, next_status) AND current BETWEEN max AND min;';
         $actual = $query.';';
 
         $this->assertEquals($expected, $actual);
@@ -291,6 +291,7 @@ final class DatabaseTest extends TestCase
 
     public function testToString()
     {
+        try{
         $query = Query::table('users')->as('a')
             ->select('a.*')
             ->join(Query::table('users')
@@ -300,13 +301,17 @@ final class DatabaseTest extends TestCase
                 'users.username', 'b.username')->as('b')
             ->orderBy('users.email');
         
-        $expected = 'SELECT a.* FROM `users` AS a ';
+        $expected = 'SELECT a.* FROM users AS a ';
         $expected .= 'INNER JOIN (';
-        $expected .= 'SELECT username, email, COUNT(*) FROM `users` GROUP BY username, email HAVING COUNT(*) > :HAVING1';
+        $expected .= 'SELECT username, email, COUNT(*) FROM users GROUP BY username, email HAVING COUNT(*) > 1';
         $expected .= ') AS b ON users.username = b.username ORDER BY users.email ASC;';
-        $actual = $query.';';
+        $actual = $query->getSql().';';
         
         $this->assertEquals($expected, $actual);
+        }catch(\Exception $e){
+            var_dump($e->getMessage());
+            var_dump($e);
+        }
     }
 
     public function tearDown(): void

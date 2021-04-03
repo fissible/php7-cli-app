@@ -3,13 +3,19 @@
 namespace PhpCli\Database;
 
 use PhpCli\Collection;
+use PhpCli\Database\Grammar\Join;
 use PhpCli\Exceptions\QueryException;
+use PhpCli\Traits\Database\Where;
 
 class Query {
+
+    use Where;
 
     private static \PDO $db;
 
     protected string $table;
+
+    protected array $tables;
 
     protected string $alias;
 
@@ -19,7 +25,7 @@ class Query {
 
     protected array $insert;
 
-    protected array $join = [];
+    protected Collection $join;
 
     protected int $limit;
 
@@ -37,8 +43,6 @@ class Query {
 
     protected ?string $updatedField;
 
-    protected array $where = [];
-
     public function __construct(\PDO $db = null)
     {
         if ($db) {
@@ -53,6 +57,13 @@ class Query {
         }
     }
 
+    public static function raw($value): \stdClass
+    {
+        $raw = new \stdClass();
+        $raw->value = $value;
+        return $raw;
+    }
+
     public static function setDriver(\PDO $db)
     {
         static::$db = $db;
@@ -61,6 +72,20 @@ class Query {
     public static function table(string $table): Query
     {
         return (new static())->setTable($table);
+    }
+
+    public static function transaction(callable $callback)
+    {
+        $return = null;
+        try {
+            static::$db->beginTransaction();
+            $return = $callback();
+            static::$db->commit();
+        } catch (\Throwable $e) {
+            static::$db->rollBack();
+            throw $e;
+        }
+        return $return;
     }
 
     public function addSelect(): self
@@ -73,10 +98,8 @@ class Query {
 
     public function as(string $alias): self
     {
-        if (isset($this->join) && !empty($this->join)) {
-            end($this->join);
-            $this->join[key($this->join)]['as'] = $alias;
-            reset($this->join);
+        if (isset($this->join) && !$this->join->empty()) {
+            $this->join->last()->as($alias);
         } else {
             $this->alias = $alias;
         }
@@ -102,20 +125,6 @@ class Query {
         return $this->exe($this->compileQuery());
     }
 
-    public static function transaction(callable $callback)
-    {
-        $return = null;
-        try {
-            static::$db->beginTransaction();
-            $return = $callback();
-            static::$db->commit();
-        } catch (\Throwable $e) {
-            static::$db->rollBack();
-            throw $e;
-        }
-        return $return;
-    }
-
     public function exe(string $sql)
     {
         if (!isset(static::$db)) {
@@ -123,12 +132,18 @@ class Query {
         }
 
         if ($this->isMultiInsert()) {
+            $join_params = [];
+            if (isset($this->join)) {
+                $this->join->each(function (Join $join) use (&$join_params) {
+                    $join_params[] = $join->getWhereParameters();
+                });
+            }
             $where_params = $this->getWhereParameters();
             $having_params = $this->getHavingParameters();
             static::$db->beginTransaction();
             try {
                 foreach ($this->insert as $input_parameters) {
-                    $parameters = array_merge($input_parameters, $where_params, $having_params);
+                    $parameters = array_merge($input_parameters, $join_params, $where_params, $having_params);
                     $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
                     $result = $stmt->execute();
                 }
@@ -138,7 +153,7 @@ class Query {
                 throw $e;
             }
         } else {
-            $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams($sql));
+            $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams());
             $result = $stmt->execute();
         }
         
@@ -154,24 +169,33 @@ class Query {
         return $result;
     }
 
+    public function from(): self
+    {
+        $this->tables = func_get_args();
+        return $this;
+    }
+
     /**
      * @return array
      */
-    public function getParams(string $sql = null): array
+    public function getParams(): array
     {
         $input_parameters = [];
-        if (is_null($sql)) {
-            $sql = $this->compileQuery();
-        }
+        $join_params = [];
         $where_params = $this->getWhereParameters();
         $having_params = $this->getHavingParameters();
-        if (substr($sql, 0, 6) === 'INSERT' && isset($this->insert)) {
+        if (isset($this->join)) {
+            $this->join->each(function (Join $join) use (&$join_params) {
+                $join_params = array_merge($join_params, $join->getWhereParameters());
+            });
+        }
+        if (isset($this->insert)) {
             $input_parameters = $this->insert;
-        } elseif (substr($sql, 0, 6) === 'UPDATE' && isset($this->update)) {
+        } elseif (isset($this->update)) {
             $input_parameters = $this->update;
         }
 
-        return array_merge($input_parameters, $where_params, $having_params);
+        return array_merge($input_parameters, $join_params, $where_params, $having_params);
     }
 
     /**
@@ -182,7 +206,8 @@ class Query {
     public function getSql(): string
     {
         $sql = $this->compileQuery();
-        $params = $this->getParams($sql);
+        $params = $this->getParams();
+
         foreach ($params as $key => $value) {
             $sql = str_replace($key, $value, $sql);
         }
@@ -310,31 +335,87 @@ class Query {
         return static::$db->lastInsertId();
     }
 
-    public function innerJoin($table, string $localKey, string $foreignKey): self
+    /**
+     * Set a JOIN clause:
+     *  ->join($table, $localKey, $foreignKey[[, $operator], $type])
+     *  ->join($table, $onArray[, $type])
+     */
+    public function join(): self
     {
-        return $this->join($table, $localKey, $foreignKey, $type = 'INNER');
-    }
+        $args = func_get_args();
+        $type = Join::TYPE_INNER;
+        $tableOrSubquery = array_shift($args);
 
-    public function join($table, string $localKey, string $foreignKey, $type = 'INNER'): self
-    {
-        $this->join[] = [$type, $table, $localKey, $foreignKey];
+        // Scan for a join type
+        end($args);
+        if (in_array(current($args), Join::validTypes())) {
+            $type = array_pop($args);
+        }
+        reset($args);
+        
+        $join = new Join($type, $tableOrSubquery);
+
+        // Parse out the ON condition
+        if (!in_array($type, [Join::TYPE_NATURAL, Join::TYPE_CROSS])) {
+            $where = [];
+            foreach ($args as $arg) {
+                if (is_string($arg)) {
+                    $where[] = $arg;
+                } elseif (is_array($arg)) {
+                    $join->on($arg);
+                }
+            }
+            if (count($where) > 0) {
+                if (count($where) === 2 || count($where) === 3) {
+                    $join->on(...$where);
+                } else {
+                    throw new \InvalidArgumentException('Query join statement must provide a foreign and local key plus an optional operator.');
+                }
+            }
+        }
+
+        if (!isset($this->join)) {
+            $this->join = new Collection();
+        }
+
+        $this->join->push($join);
         return $this;
     }
 
-    public function leftJoin($table, string $localKey, string $foreignKey): self
+    public function crossJoin(string $table): self
     {
-        return $this->join($table, $localKey, $foreignKey, $type = 'LEFT');
+        return $this->join($table, Join::TYPE_CROSS);
     }
 
-    public function outerJoin($table, string $localKey, string $foreignKey): self
+    public function innerJoin(): self
     {
-        return $this->join($table, $localKey, $foreignKey, $type = 'OUTER');
+        $args = func_get_args();
+        $args[] = Join::TYPE_INNER;
+        return $this->join(...$args);
     }
 
-    public function rightJoin($table, string $localKey, string $foreignKey): self
+    public function leftJoin(): self
     {
-        return $this->join($table, $localKey, $foreignKey, $type = 'RIGHT');
+        $args = func_get_args();
+        $args[] = Join::TYPE_LEFT;
+        return $this->join(...$args);
+        // return $this->join($table, $localKey, $foreignKey, '=', $type = 'LEFT');
     }
+
+    public function naturalJoin(string $table): self
+    {
+        return $this->join($table, Join::TYPE_NATURAL);
+    }
+
+    // public function outerJoin($table, string $localKey, string $foreignKey): self
+    // {
+    //     return $this->join($table, $localKey, $foreignKey, '=', $type = 'OUTER');
+    // }
+
+    // public function rightJoin($table, string $localKey, string $foreignKey): self
+    // {
+    //     return $this->join($table, $localKey, $foreignKey, '=', $type = 'RIGHT');
+    // }
 
     /**
      * @param array $data
@@ -389,147 +470,10 @@ class Query {
         return $this;
     }
 
-    public function orWhere(): self
-    {
-        $args = func_get_args();
-        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
-
-        if (count($args) === 1) {
-            $this->addWhere('OR', $args[0]);
-        } else {
-            $this->addWhere('OR', $column, $operator, $value);
-        }
-
-        return $this;
-    }
-
-    /**
-     * Convert value into SQL date for comparison.
-     */
-    public function orWhereDate(): self
-    {
-        $args = func_get_args();
-        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
-
-        if (is_int($value)) {
-            $value = \DateTime::createFromFormat('U');
-        }
-        if ($value instanceof \DateTime) {
-            $value = $value->format('Y-m-d');
-        }
-
-        // sqlite specific
-        return $this->addWhere('OR', sprintf('date(%s, \'unixepoch\')', $column), $operator, $value);
-    }
-
-    public function orWhereIn(string $column, array $values): self
-    {
-        return $this->addWhere('OR', $column, 'IN', $values);
-    }
-
-    public function orWhereNotIn(string $column, array $values): self
-    {
-        return $this->addWhere('OR', $column, 'NOT IN', $values);
-    }
-
-    public function where(): self
-    {
-        $args = func_get_args();
-        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
-
-        if (count($args) === 1) {
-            $this->addWhere('AND', $args[0]);
-        } else {
-            $this->addWhere('AND', $column, $operator, $value);
-        }
-
-        return $this;
-    }
-
-    /**
-     * Inclusive; BETWEEN 3 AND 5 yields 3, 4, 5
-     */
-    public function whereBetween(string $column, array $values, string $conjunction = 'AND'): self
-    {
-        return $this->addWhere(strtoupper($conjunction), $column, 'BETWEEN', $values);
-    }
-
-    /**
-     * Convert value into SQL date for comparison.
-     */
-    public function whereDate(): self
-    {
-        $args = func_get_args();
-        [$column, $operator, $value] = $this->expandColumnOperatorValue(...$args);
-
-        if (is_int($value)) {
-            $value = \DateTime::createFromFormat('U');
-        }
-        if ($value instanceof \DateTime) {
-            $value = $value->format('Y-m-d');
-        }
-
-        // sqlite specific
-        return $this->addWhere('AND', sprintf('date(%s, \'unixepoch\')', $column), $operator, $value);
-    }
-
-    public function whereIn(string $column, array $values): self
-    {
-        return $this->addWhere('AND', $column, 'IN', $values);
-    }
-
-    public function whereNotBetween(string $column, array $values, string $conjunction = 'AND'): self
-    {
-        return $this->addWhere(strtoupper($conjunction), $column, 'NOT BETWEEN', $values);
-    }
-
-    public function whereNotIn(string $column, array $values): self
-    {
-        return $this->addWhere('AND', $column, 'NOT IN', $values);
-    }
-
     private function addHaving(string $column, $operator = null, $value = null): self
     {
         $this->having[] = [$column, $operator, $value];
         return $this;
-    }
-
-    private function addWhere(string $conjunction, $column, $operator = null, $value = null): self
-    {
-        $this->where[] = [$conjunction, $column, $operator, $value];
-        return $this;
-    }
-
-    /**
-     * From 2 or 3 arguments return column, operator and value(s).
-     */
-    private function expandColumnOperatorValue()
-    {
-        $args = func_get_args();
-        $operator = null;
-        $value = null;
-
-        if (count($args) === 1 && !is_callable($args[0])) {
-            throw new \InvalidArgumentException('Single parameter must be a callable.');
-        }
-
-        if (count($args) > 1) {
-            $operator = count($args) > 2 ? strtoupper($args[1]) : '=';
-            $value = count($args) > 2 ? $args[2] : $args[1];
-
-            // `column` IS NULL || `column` IS NOT NULL
-            if ($value === null && !in_array($operator, ['IS', 'IS NOT'])) {
-                if ($operator === '=') {
-                    $operator = 'IS';
-                } elseif ($operator === '!=' || $operator === '<>') {
-                    $operator = 'IS NOT';
-                } else {
-                    throw new \InvalidArgumentException(sprintf('Invalid operator "%s" for NULL value.', $operator));
-                }
-            }
-        }
-
-        return [$args[0], $operator, $value];
     }
 
     private function isMultiInsert($input_parameters = null): bool
@@ -568,57 +512,46 @@ class Query {
     }
 
     /**
-     * @param array $join
+     * @param string|null $type
+     * @param array|null $input_parameters
      * @return string
      */
-    private function compileJoin(array $join): string
-    {
-        $table = $join[1];
-
-        if ($table instanceof Query) {
-            $table = '('.$table.')';
-        }
-
-        if (isset($join['as'])) {
-            $table .= ' AS '.$join['as'];
-        }
-
-        return sprintf(
-            '%s JOIN %s ON %s = %s',
-            $join[0], $table, $join[2], $join[3]
-        );
-    }
-
-    public function compileQuery(string $type = null, $input_parameters = null): string
+    public function compileQuery(string $type = null, array $input_parameters = null): string
     {
         $type = $type ?? $this->type ?? 'SELECT';
+        if (isset($this->tables)) {
+            $tables = [];
+            foreach ($this->tables as $table) {
+                if (is_array($table)) {
+                    foreach ($table as $alias => $table) {
+                        $tables[] = sprintf('%s AS %s', $table, $alias);
+                    }
+                } else {
+                    $tables[] = $table;
+                }
+            }
+            $tables = implode(', ', $tables);
+        } else {
+            $tables = $this->table;
+            if (isset($this->alias)) {
+                $tables .= ' AS '.$this->alias;
+            }
+        }
+
         switch ($type) {
             case 'COUNT':
                 if (count($this->select) === 1 && $this->select[0] === '*') {
-                    $sql = sprintf("SELECT COUNT(*) FROM `%s`", $this->table);
+                    $sql = sprintf("SELECT COUNT(*) FROM %s", $tables);
                 } else {
-                    $sql = sprintf("SELECT  COUNT(*), %s FROM `%s`", implode(', ', $this->select), $this->table);
-                }
-                if (isset($this->alias)) {
-                    $sql .= ' AS '.$this->alias;
+                    $sql = sprintf("SELECT COUNT(*), %s FROM %s", implode(', ', $this->select), $tables);
                 }
             break;
             case 'DELETE':
-                $sql = sprintf("DELETE FROM `%s`", $this->table);
-                if (isset($this->alias)) {
-                    $sql .= ' AS '.$this->alias;
-                }
+                $sql = sprintf("DELETE FROM %s", $tables);
             break;
             case 'INSERT':
-                if (is_null($input_parameters) && isset($this->insert)) {
-                    $input_parameters = $this->insert;
-                }
-
-                if (isset($this->alias)) {
-                    $sql = sprintf("INSERT INTO `%s` AS %s (", $this->table, $this->alias);
-                } else {
-                    $sql = sprintf("INSERT INTO `%s` (", $this->table);
-                }
+                $input_parameters ??= $this->insert;
+                $sql = sprintf("INSERT INTO %s (", $tables);
                 
                 if ($this->isMultiInsert($input_parameters)) {
                     foreach ($input_parameters[0] as $key => $val) {
@@ -634,8 +567,7 @@ class Query {
                 }
                 
                 $sql = ltrim(rtrim($sql, ','));
-                $sql .= ') VALUES ';
-                $sql .= '(';
+                $sql .= ') VALUES (';
 
                 if ($this->isMultiInsert($input_parameters)) {
                     foreach ($input_parameters[0] as $key => $val) {
@@ -654,21 +586,11 @@ class Query {
                 $sql .= ')';
             break;
             case 'SELECT':
-                $sql = sprintf("SELECT %s FROM `%s`", implode(', ', $this->select), $this->table);
-                if (isset($this->alias)) {
-                    $sql .= ' AS '.$this->alias;
-                }
+                $sql = sprintf("SELECT %s FROM %s", implode(', ', $this->select), $tables);
             break;
             case 'UPDATE':
-                if (is_null($input_parameters) && isset($this->update)) {
-                    $input_parameters = $this->update;
-                }
-
-                if (isset($this->alias)) {
-                    $sql = sprintf("UPDATE `%s` AS %s SET", $this->table, $this->alias);
-                } else {
-                    $sql = sprintf("UPDATE `%s` SET", $this->table);
-                }
+                $input_parameters ??= $this->update;
+                $sql = sprintf("UPDATE %s SET", $tables);
 
                 foreach ($input_parameters as $key => $val) {
                     $sql .= sprintf(" `%s` = :%s,", $key, $key);
@@ -681,13 +603,15 @@ class Query {
             break;
         }
 
-        if (!empty($this->join)) {
-            foreach ($this->join as $join) {
-                $sql .= ' '.$this->compileJoin($join);
-            }
+        $param_key = count($input_parameters ?? []);
+
+        if (isset($this->join)) {
+            $this->join->each(function (Join $join) use (&$sql) {
+                $sql .= ' '.$join->compile($param_key);
+            });
         }
 
-        if ($where = $this->compileWhere()) {
+        if ($where = $this->compileWhere(false, $param_key)) {
             $sql .= ' WHERE '.$where;
         }
 
@@ -720,108 +644,19 @@ class Query {
                 $sql .= sprintf(' OFFSET %d', $this->offset);
             }
         }
-        
 
         return $sql;
+    }
+
+    public static function __callStatic($method, $args)
+    {
+        $instance = new static();
+        return $instance->select(...$args);
     }
 
     public function __toString(): string
     {
-        return $this->compileQuery();
-    }
-
-    private function compileWhere(bool $enclose = false, int &$param_key = 0): string
-    {
-        $sql = '';
-
-        if (!empty($this->where)) {
-            if ($enclose) {
-                $sql .= '(';
-            }
-
-            foreach ($this->where as $key => $where) {
-                if ($key > 0) $sql .= ' '.$where[0].' '; // AND|OR
-                $param_key + $key;
-                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, $param_key);
-                $this->where[$key][4] = $input_parameters;
-                $sql .= $whereSql;
-            }
-
-            if ($enclose) {
-                $sql .= ')';
-            }
-        }
-
-        return $sql;
-    }
-
-    private function compileWhereCriteria($where, int &$param_key = 0): array
-    {
-        $conjunction = $where[0];
-
-        if (is_object($where[1]) && $where[1] instanceof \Closure) {
-            $query = new static(static::$db);
-            $where[1]($query);
-            $sql = $query->compileWhere(true, $param_key);
-            
-            return [$sql, $query->getWhereParameters()];
-        }
-
-        $operator = $where[2];
-        $value = $where[3];
-        $input_parameters = [];
-        if (is_array($value)) {
-            if (in_array($operator, ['IN', 'NOT IN'])) {
-                $in = '';
-                foreach ($value as $item) {
-                    if (!is_string($item) || $item[0] !== '`') {
-                        $param_key++;
-                        $key = ':'.(str_replace(' ', '_', $operator)).$param_key;
-                        $in .= "$key, ";
-                        $input_parameters[$key] = $item;
-                    } else {
-                        $in .= "$item, ";
-                    }
-                }
-                $value = '('.rtrim(trim($in), ',').')';
-            } elseif($operator === 'BETWEEN') {
-                $value = array_values($value);
-                $values = [];
-
-                if (!is_string($value[0]) || $value[0][0] !== '`') {
-                    $keyFrom = $operator.(++$param_key);
-                    $input_parameters[':'.$keyFrom] = $value[0];
-                    $values[] = ':'.$keyFrom;
-                } else {
-                    $values[] = $value[0];
-                }
-
-                if (!is_string($value[1]) || $value[1][0] !== '`') {
-                    $keyTo = $operator.(++$param_key);
-                    $input_parameters[':'.$keyTo] = $value[1];
-                    $values[] = ':'.$keyTo;
-                } else {
-                    $values[] = $value[1];
-                }
-                
-                $value = implode(' AND ', $values);
-            } else {
-                throw new \InvalidArgumentException(sprintf('Invalid WHERE criteria value "%s', gettype($value)));
-            }
-        } elseif (!is_string($value) || $value[0] !== '`') {
-            $param_key++;
-            $key = ':'.$conjunction.$param_key;
-            $input_parameters[$key] = $value;
-            $value = $key;
-        }
-
-        // `table.field` -> `table`.`field`
-        $column = $where[1];
-        if ($column[0] === '`' && $column[-1] === '`' && false !== strpos($column, '.') && substr_count($column, '`') === 2) {
-            $column = str_replace('.', '`.`', $column);
-        }
-        
-        return [sprintf('%s %s %s', $column, $operator, $value), $input_parameters];
+        return $this->getSql();
     }
 
     /**
@@ -833,20 +668,6 @@ class Query {
         foreach ($this->having as $having) {
             if (isset($having[3]) && !empty($having[3])) {
                 $parameters = array_merge($parameters, $having[3]);
-            }
-        }
-        return $parameters;
-    }
-
-    /**
-     * @return array
-     */
-    private function getWhereParameters(): array
-    {
-        $parameters = [];
-        foreach ($this->where as $where) {
-            if (isset($where[4]) && !empty($where[4])) {
-                $parameters = array_merge($parameters, $where[4]);
             }
         }
         return $parameters;
