@@ -491,8 +491,8 @@ class Model implements \JsonSerializable, \Serializable
      */
     protected function asDatetime($value): \DateTime
     {
-        if ($value instanceof \DateTimeInterface) {
-            return \DateTime::createFromInterface($value);
+        if ($value instanceof \DateTime) {
+            return $value;
         }
 
         if (is_numeric($value)) {
@@ -500,12 +500,12 @@ class Model implements \JsonSerializable, \Serializable
         }
 
         // Y-m-d
-        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $value)) {
+        if (is_string($value) && preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $value)) {
             return (\DateTime::createFromFormat('Y-m-d', $value))->setTime(0, 0);
         }
 
         // Y-m-d H:i:s
-        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{2}):(\d{2}):(\d{2})$/', $value)) {
+        if (is_string($value) && preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{2}):(\d{2}):(\d{2})$/', $value)) {
             return \DateTime::createFromFormat('Y-m-d H:i:s', $value);
         }
 
