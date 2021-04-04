@@ -2,8 +2,14 @@
 
 namespace PhpCli\Traits\Database;
 
+use PhpCli\Database\Query;
+
 trait Where
 {
+    protected Query $parent;
+
+    protected int $param_key = 0;
+
     private array $where = [];
 
     /**
@@ -125,6 +131,23 @@ trait Where
         return $this->addWhere('AND', $column, 'BETWEEN', $values);
     }
 
+    protected function getParamKey(): string
+    {
+        if (!isset($this->parent)) {
+            $this->param_key++;
+            return (string) $this->param_key;
+        }
+        return $this->parent->getParamKey();
+    }
+
+    protected function getParent(): Query
+    {
+        if (!isset($this->parent)) {
+            return $this;
+        }
+        return $this->parent;
+    }
+
     protected function whereColumn(): self
     {
         $args = func_get_args();
@@ -133,7 +156,7 @@ trait Where
         if (count($args) === 1) {
             $this->addWhere('AND', $args[0]);
         } else {
-            $this->addWhere('AND', $column, $operator, \PhpCli\Database\Query::raw($value));
+            $this->addWhere('AND', $column, $operator, Query::raw($value));
         }
 
         return $this;
@@ -180,7 +203,7 @@ trait Where
         return $this;
     }
 
-    protected function compileWhere(bool $enclose = false, ?int &$param_key = 0): string
+    protected function compileWhere(bool $enclose = false): string
     {
         $sql = '';
 
@@ -191,8 +214,7 @@ trait Where
 
             foreach ($this->where as $key => $where) {
                 if ($key > 0) $sql .= ' '.$where[0].' '; // AND|OR
-                $param_key + $key;
-                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where, $param_key);
+                list($whereSql, $input_parameters) = $this->compileWhereCriteria($where);
                 $this->where[$key][4] = $input_parameters;
                 $sql .= $whereSql;
             }
@@ -205,14 +227,14 @@ trait Where
         return $sql;
     }
 
-    private function compileWhereCriteria(array $where, ?int &$param_key = 0): array
+    private function compileWhereCriteria(array $where): array
     {
         $conjunction = $where[0];
 
         if (is_object($where[1]) && !($where[1] instanceof \stdClass) && ($where[1] instanceof \Closure)) {
-            $query = new \PhpCli\Database\Query();
+            $query = new Query(Query::driver(), $this->getParent());
             $where[1]($query);
-            $sql = $query->compileWhere(true, $param_key);
+            $sql = $query->compileWhere(true);
             
             return [$sql, $query->getWhereParameters()];
         }
@@ -225,8 +247,7 @@ trait Where
                 $in = '';
                 foreach ($value as $item) {
                     if (!$this->valueisRaw($item)) {
-                        $param_key++;
-                        $key = ':'.(str_replace(' ', '_', $operator)).$param_key;
+                        $key = ':'.(str_replace(' ', '_', $operator)).$this->getParamKey();
                         $in .= "$key, ";
                         $input_parameters[$key] = $item;
                     } else {
@@ -239,7 +260,7 @@ trait Where
                 $values = [];
 
                 if (!$this->valueisRaw($value[0])) {
-                    $keyFrom = $operator.(++$param_key);
+                    $keyFrom = $operator.$this->getParamKey();
                     $input_parameters[':'.$keyFrom] = $value[0];
                     $values[] = ':'.$keyFrom;
                 } else {
@@ -247,7 +268,7 @@ trait Where
                 }
 
                 if (!$this->valueisRaw($value[1])) {
-                    $keyTo = $operator.(++$param_key);
+                    $keyTo = $operator.$this->getParamKey();
                     $input_parameters[':'.$keyTo] = $value[1];
                     $values[] = ':'.$keyTo;
                 } else {
@@ -259,8 +280,7 @@ trait Where
                 throw new \InvalidArgumentException(sprintf('Invalid WHERE criteria value "%s', gettype($value)));
             }
         } elseif (!$this->valueisRaw($value)) {
-            $param_key++;
-            $key = ':'.$conjunction.$param_key;
+            $key = ':'.$conjunction.$this->getParamKey();
             $input_parameters[$key] = $value;
             $value = $key;
         } else {

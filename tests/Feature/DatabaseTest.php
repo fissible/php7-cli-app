@@ -303,13 +303,46 @@ final class DatabaseTest extends TestCase
         
         $expected = 'SELECT a.* FROM users AS a ';
         $expected .= 'INNER JOIN (';
-        $expected .= 'SELECT username, email, COUNT(*) FROM users GROUP BY username, email HAVING COUNT(*) > 1';
+        $expected .= 'SELECT username, email, COUNT(*) FROM users GROUP BY username, email HAVING COUNT(*) > :HAVING1';
         $expected .= ') AS b ON users.username = b.username ORDER BY users.email ASC;';
         $actual = $query->getSql().';';
         
         $this->assertEquals($expected, $actual);
-        }catch(\Exception $e){
-            var_dump($e->getMessage());
+
+        $query = Query::select(
+                'country.country_name_eng',
+                ['calls' => 'SUM(CASE WHEN call.id IS NOT NULL THEN 1 ELSE 0 END)'],
+                ['avg_difference' => 'AVG(ISNULL(DATEDIFF(SECOND, call.start_time, call.end_time),0))']
+            )
+            ->from('country')
+            ->leftJoin('city', 'city.country_id', 'country.id')
+            ->leftJoin('customer', 'city.id', 'customer.city_id')
+            ->leftJoin('call', 'call.customer_id', 'customer.id')
+            ->groupBy('country.id', 'country.country_name_eng')
+            ->having('AVG(ISNULL(DATEDIFF(SECOND, call.start_time, call.end_time),0))', '>', '(SELECT AVG(DATEDIFF(SECOND, call.start_time, call.end_time)) FROM call)')
+            ->orderBy([
+                'calls' => 'DESC',
+                'country.id' => 'ASC'
+            ]);
+
+        $expected = preg_replace("/\s+/", ' ', 'SELECT 
+                country.country_name_eng,
+                SUM(CASE WHEN call.id IS NOT NULL THEN 1 ELSE 0 END) AS calls,
+                AVG(ISNULL(DATEDIFF(SECOND, call.start_time, call.end_time),0)) AS avg_difference
+            FROM country 
+            LEFT JOIN city ON city.country_id = country.id
+            LEFT JOIN customer ON city.id = customer.city_id
+            LEFT JOIN call ON call.customer_id = customer.id
+            GROUP BY 
+                country.id,
+                country.country_name_eng
+            HAVING AVG(ISNULL(DATEDIFF(SECOND, call.start_time, call.end_time),0)) > (SELECT AVG(DATEDIFF(SECOND, call.start_time, call.end_time)) FROM call)
+            ORDER BY calls DESC, country.id ASC;'
+        );
+        $actual = $query->getSql().';';
+        
+        $this->assertEquals($expected, $actual);
+        } catch (\Exception $e) {
             var_dump($e);
         }
     }

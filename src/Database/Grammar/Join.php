@@ -33,8 +33,9 @@ class Join
      * @param string $type
      * @param string|Query $tableOrSubquery
      */
-    public function __construct(string $type, $tableOrSubquery)
+    public function __construct(Query $parent, string $type, $tableOrSubquery)
     {
+        $this->parent = $parent;
         $this->setType($type);
 
         if (is_string($tableOrSubquery)) {
@@ -48,10 +49,12 @@ class Join
 
     /**
      * @param string $alias
+     * @return self
      */
-    public function as(string $alias)
+    public function as(string $alias): self
     {
         $this->alias = $alias;
+        return $this;
     }
 
     /**
@@ -59,7 +62,7 @@ class Join
      */
     public function compile(?int &$param_key = 0): string
     {
-        $table = $this->table ?? '('.$this->subQuery->getSql().')';
+        $table = $this->table ?? '('.$this->subQuery->compileQuery().')';
 
         if (isset($this->alias)) {
             $table .= ' AS '.$this->alias;
@@ -80,6 +83,14 @@ class Join
         }
 
         return $sql;
+    }
+
+    public function getSubquery(): ?Query
+    {
+        if (isset($this->subQuery)) {
+            return $this->subQuery;
+        }
+        return null;
     }
 
     /**

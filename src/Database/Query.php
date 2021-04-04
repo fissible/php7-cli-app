@@ -43,10 +43,13 @@ class Query {
 
     protected ?string $updatedField;
 
-    public function __construct(\PDO $db = null)
+    public function __construct(\PDO $db = null, Query $parent = null)
     {
         if ($db) {
             static::setDriver($db);
+        }
+        if ($parent) {
+            $this->setParent($parent);
         }
     }
 
@@ -129,6 +132,10 @@ class Query {
     {
         if (!isset(static::$db)) {
             throw new \RuntimeException('No PDO driver available.');
+        }
+
+        if (isset($this->parent)) {
+            throw new \RuntimeException('Subquery cannot be executed independently.');
         }
 
         if ($this->isMultiInsert()) {
@@ -337,7 +344,7 @@ class Query {
 
     /**
      * Set a JOIN clause:
-     *  ->join($table, $localKey, $foreignKey[[, $operator], $type])
+     *  ->join($table, $localKey[, $operator], $foreignKey[, $type])
      *  ->join($table, $onArray[, $type])
      */
     public function join(): self
@@ -346,14 +353,18 @@ class Query {
         $type = Join::TYPE_INNER;
         $tableOrSubquery = array_shift($args);
 
+        if ($tableOrSubquery instanceof Query) {
+            $tableOrSubquery->setParent($this);
+        }
+
         // Scan for a join type
         end($args);
         if (in_array(current($args), Join::validTypes())) {
             $type = array_pop($args);
         }
         reset($args);
-        
-        $join = new Join($type, $tableOrSubquery);
+
+        $join = new Join($this, $type, $tableOrSubquery);
 
         // Parse out the ON condition
         if (!in_array($type, [Join::TYPE_NATURAL, Join::TYPE_CROSS])) {
@@ -399,23 +410,12 @@ class Query {
         $args = func_get_args();
         $args[] = Join::TYPE_LEFT;
         return $this->join(...$args);
-        // return $this->join($table, $localKey, $foreignKey, '=', $type = 'LEFT');
     }
 
     public function naturalJoin(string $table): self
     {
         return $this->join($table, Join::TYPE_NATURAL);
     }
-
-    // public function outerJoin($table, string $localKey, string $foreignKey): self
-    // {
-    //     return $this->join($table, $localKey, $foreignKey, '=', $type = 'OUTER');
-    // }
-
-    // public function rightJoin($table, string $localKey, string $foreignKey): self
-    // {
-    //     return $this->join($table, $localKey, $foreignKey, '=', $type = 'RIGHT');
-    // }
 
     /**
      * @param array $data
@@ -448,19 +448,28 @@ class Query {
         return $this;
     }
 
-    public function orderBy(string $field, string $dir = 'ASC'): self
+    public function orderBy(): self
     {
         if (!isset($this->order)) {
             $this->order = [];
         }
-        $this->order[$field] = strtoupper($dir);
+        $args = func_get_args();
+        if (is_string($args[0])) {
+            $this->order[$args[0]] = isset($args[1]) ? strtoupper($args[1]) : 'ASC';
+        } elseif (is_array($args[0])) {
+            $this->order = array_merge($this->order, $args[0]);
+        }
+        
         return $this;
     }
 
-    public function select(): self
+    /**
+     * @param Query $query
+     * @return self
+     */
+    private function setParent(Query $query): self
     {
-        $this->type = 'SELECT';
-        $this->select = func_get_args();
+        $this->parent = $query;
         return $this;
     }
 
@@ -473,6 +482,13 @@ class Query {
     private function addHaving(string $column, $operator = null, $value = null): self
     {
         $this->having[] = [$column, $operator, $value];
+        return $this;
+    }
+
+    private function internalSelect(): self
+    {
+        $this->type = 'SELECT';
+        $this->select = func_get_args();
         return $this;
     }
 
@@ -519,32 +535,12 @@ class Query {
     public function compileQuery(string $type = null, array $input_parameters = null): string
     {
         $type = $type ?? $this->type ?? 'SELECT';
-        if (isset($this->tables)) {
-            $tables = [];
-            foreach ($this->tables as $table) {
-                if (is_array($table)) {
-                    foreach ($table as $alias => $table) {
-                        $tables[] = sprintf('%s AS %s', $table, $alias);
-                    }
-                } else {
-                    $tables[] = $table;
-                }
-            }
-            $tables = implode(', ', $tables);
-        } else {
-            $tables = $this->table;
-            if (isset($this->alias)) {
-                $tables .= ' AS '.$this->alias;
-            }
-        }
+        $tables = $this->compileTables();
 
         switch ($type) {
             case 'COUNT':
-                if (count($this->select) === 1 && $this->select[0] === '*') {
-                    $sql = sprintf("SELECT COUNT(*) FROM %s", $tables);
-                } else {
-                    $sql = sprintf("SELECT COUNT(*), %s FROM %s", implode(', ', $this->select), $tables);
-                }
+            case 'SELECT':
+                $sql = sprintf("SELECT %s FROM %s", $this->compileSelect($type), $tables);
             break;
             case 'DELETE':
                 $sql = sprintf("DELETE FROM %s", $tables);
@@ -585,8 +581,6 @@ class Query {
                 }
                 $sql .= ')';
             break;
-            case 'SELECT':
-                $sql = sprintf("SELECT %s FROM %s", implode(', ', $this->select), $tables);
             break;
             case 'UPDATE':
                 $input_parameters ??= $this->update;
@@ -648,15 +642,62 @@ class Query {
         return $sql;
     }
 
-    public static function __callStatic($method, $args)
+    /**
+     * @param string $type
+     * @return string
+     */
+    private function compileSelect(string $type = null): string
     {
-        $instance = new static();
-        return $instance->select(...$args);
+        $selects = [];
+        $selectArray = $this->select;
+        if ($type === 'COUNT') {
+            if (count($selectArray) === 1 && $selectArray[0] === '*') {
+                return 'COUNT(*)';
+            }
+            $selects[] = 'COUNT(*)';
+            $selectArray = array_filter($selectArray, function ($select) {
+                return $select !== '*';
+            });
+        }
+
+        foreach ($selectArray as $key => $value) {
+            if (is_string($value)) {
+                $selects[] = $value;
+            } elseif (is_array($value)) {
+                foreach ($value as $alias => $select) {
+                    $selects[] = $select.' AS '.$alias;
+                }
+            }
+        }
+
+        return implode(', ', $selects);
     }
 
-    public function __toString(): string
+    /**
+     * @return string
+     */
+    private function compileTables(): string
     {
-        return $this->getSql();
+        if (isset($this->tables)) {
+            $tables = [];
+            foreach ($this->tables as $table) {
+                if (is_array($table)) {
+                    foreach ($table as $alias => $table) {
+                        $tables[] = sprintf('%s AS %s', $table, $alias);
+                    }
+                } else {
+                    $tables[] = $table;
+                }
+            }
+            $tables = implode(', ', $tables);
+        } else {
+            $tables = $this->table;
+            if (isset($this->alias)) {
+                $tables .= ' AS '.$this->alias;
+            }
+        }
+
+        return $tables;
     }
 
     /**
@@ -671,5 +712,29 @@ class Query {
             }
         }
         return $parameters;
+    }
+
+    public function __call($method, $args)
+    {
+        if ($method === 'select') $method = 'internalSelect';
+        if (method_exists($this, $method)) {
+            return call_user_func_array(array($this, $method), $args);
+        }
+        return $this->internalSelect(...$args);
+    }
+
+    public static function __callStatic($method, $args)
+    {
+        $instance = new static();
+        if ($method == 'select') $method = 'internalSelect';
+        if (method_exists($instance, $method)) {
+            return call_user_func_array(array($instance, $method), $args);
+        }
+        return $instance->internalSelect(...$args);
+    }
+
+    public function __toString(): string
+    {
+        return $this->getSql();
     }
 }
