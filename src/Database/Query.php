@@ -150,23 +150,23 @@ class Query {
             }
             $where_params = $this->getWhereParameters();
             $having_params = $this->getHavingParameters();
-            static::$db->beginTransaction();
+            $inTransaction = (bool) static::$db->inTransaction();
+            if (!$inTransaction) static::$db->beginTransaction();
             try {
                 foreach ($this->insert as $input_parameters) {
                     $parameters = array_merge($input_parameters, $join_params, $where_params, $having_params);
                     $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
                     $result = $stmt->execute();
                 }
-                static::$db->commit();
+                if (!$inTransaction) static::$db->commit();
             } catch (\Throwable $e) {
-                static::$db->rollBack();
+                if (!$inTransaction) static::$db->rollBack();
                 throw $e;
             }
         } else {
             $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams());
             $result = $stmt->execute();
         }
-        
 
         if (substr($sql, 0, 6) === 'SELECT') {
             return $stmt;
