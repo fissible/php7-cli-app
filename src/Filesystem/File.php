@@ -14,9 +14,7 @@ class File {
 
     public function __construct($path)
     {
-        $this->path = $path;
-        $this->info = pathinfo($path);
-        $this->setParts($path);
+        $this->setPath($path);
     }
 
     public function chmod(int $mode)
@@ -62,7 +60,7 @@ class File {
      * @param callable $matcher
      * @return array
      */
-    function filesMatch(string $dir, callable $matcher): array
+    public function filesMatch(string $dir, callable $matcher): array
     {
         $results = array_filter($this->files($dir), function ($file) use ($matcher) {
             return $matcher($file) === true;
@@ -102,16 +100,21 @@ class File {
         if (!$this->resource) throw new \Exception(sprintf('Could not open file %s.', $this->path));
 
         while (false !== $line = fgets($this->resource)) {
-            yield $line;
+            yield rtrim($line, "\r\n");
         }
 
         fclose($this->resource);
     }
 
-    public function setParts(string $path)
+    /**
+     * @param string $path
+     * @return self
+     */
+    public function setPath(string $path): self
     {
-        $path = rtrim($path, DIRECTORY_SEPARATOR);
-        $this->parts = array_filter(explode(DIRECTORY_SEPARATOR, $path));
+        $this->path = rtrim($path, DIRECTORY_SEPARATOR);
+        $this->info = pathinfo($path);
+        $this->parts = array_filter(explode(DIRECTORY_SEPARATOR, $this->path));
 
         return $this;
     }
@@ -123,7 +126,7 @@ class File {
      * @param array $results
      * @return array[File]
      */
-    function scan($dir = null, &$results = array()): array
+    public function scan($dir = null, &$results = array()): array
     {
         $path = rtrim($dir ?? $this->info['dirname'], DIRECTORY_SEPARATOR);
 
@@ -155,7 +158,7 @@ class File {
      * @param callable $matcher
      * @return array[File]
      */
-    function scanMatch(string $dir, callable $matcher): array
+    public function scanMatch(string $dir, callable $matcher): array
     {
         $results = array_filter($this->scan($dir), function ($file) use ($matcher) {
             return $matcher($file) === true;
