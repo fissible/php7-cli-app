@@ -13,6 +13,8 @@ class Query {
 
     private static \PDO $db;
 
+    private static QueryException $lastError;
+
     protected string $table;
 
     protected array $tables;
@@ -115,7 +117,8 @@ class Query {
         $statement = $this->exe($this->compileQuery());
         if (!$statement) {
             $error = static::$db->errorInfo();
-            throw new QueryException($error[2], $error[0], $error[1]);
+            static::$lastError = new QueryException($error[2], $error[0], $error[1]);
+            throw static::$lastError;
         }
         $result = $statement->fetchColumn();
 
@@ -231,7 +234,8 @@ class Query {
 
         if (!$stmt) {
             $error = static::$db->errorInfo();
-            throw new QueryException($error[2], $error[0], $error[1]);
+            static::$lastError = new QueryException($error[2], $error[0], $error[1]);
+            throw static::$lastError;
         }
         return $stmt;
     }
@@ -255,7 +259,8 @@ class Query {
         $statement = $this->exe($this->compileQuery());
         if (!$statement) {
             $error = static::$db->errorInfo();
-            throw new QueryException($error[2], $error[0], $error[1]);
+            static::$lastError = new QueryException($error[2], $error[0], $error[1]);
+            throw static::$lastError;
         }
         $result = $statement->fetch(\PDO::FETCH_OBJ);
         if (!$result) {
@@ -270,7 +275,8 @@ class Query {
         $statement = $this->exe($this->compileQuery());
         if (!$statement) {
             $error = static::$db->errorInfo();
-            throw new QueryException($error[2], $error[0], $error[1]);
+            static::$lastError = new QueryException($error[2], $error[0], $error[1]);
+            throw static::$lastError;
         }
         $result = $statement->fetchAll(\PDO::FETCH_OBJ);
         if (!$result) {
@@ -335,6 +341,14 @@ class Query {
         $this->createdField = $createdField;
         $this->type = 'INSERT';
         return $this->exe($this->compileQuery());
+    }
+
+    public static function getLastError(): ?QueryException
+    {
+        if (isset(static::$lastError)) {
+            return static::$lastError;
+        }
+        return null;
     }
 
     public static function insertId()
