@@ -10,6 +10,8 @@ class File {
 
     private array $info;
 
+    private $resource;
+
     public function __construct($path)
     {
         $this->path = $path;
@@ -89,6 +91,21 @@ class File {
     public function isDir(): bool
     {
         return is_dir($this->path);
+    }
+
+    /**
+     * Files lines generator.
+     */
+    public function lines()
+    {
+        $this->resource = fopen($this->path, 'r');
+        if (!$this->resource) throw new \Exception(sprintf('Could not open file %s.', $this->path));
+
+        while (false !== $line = fgets($this->resource)) {
+            yield $line;
+        }
+
+        fclose($this->resource);
     }
 
     public function setParts(string $path)
@@ -180,5 +197,12 @@ class File {
         }
 
         return null;
+    }
+
+    public function __destruct()
+    {
+        if (isset($this->resource) && is_resource($this->resource)) {
+            fclose($this->resource);
+        }
     }
 }
