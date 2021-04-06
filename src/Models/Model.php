@@ -323,7 +323,12 @@ class Model implements \JsonSerializable, \Serializable
         return !empty($this->dirty);
     }
 
-    public function insert(array $data = []): bool
+    /**
+     * return:
+     *  bool
+     *  int
+     */
+    public function insert(array $data = [])
     {
         static::getConnection();
         if (isset($data[0]) && is_array($data[0])) {

@@ -131,6 +131,12 @@ class Query {
         return $this->exe($this->compileQuery());
     }
 
+    /**
+     * return:
+     *  \PDOStatement
+     *  bool
+     *  int
+     */
     public function exe(string $sql)
     {
         if (!isset(static::$db)) {
@@ -142,6 +148,7 @@ class Query {
         }
 
         if ($this->isMultiInsert()) {
+            $count = 0;
             $join_params = [];
             if (isset($this->join)) {
                 $this->join->each(function (Join $join) use (&$join_params) {
@@ -156,13 +163,16 @@ class Query {
                 foreach ($this->insert as $input_parameters) {
                     $parameters = array_merge($input_parameters, $join_params, $where_params, $having_params);
                     $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
-                    $result = $stmt->execute();
+                    if ($stmt->execute()) {
+                        $count++;
+                    }
                 }
                 if (!$inTransaction) static::$db->commit();
             } catch (\Throwable $e) {
                 if (!$inTransaction) static::$db->rollBack();
                 throw $e;
             }
+            return $count;
         } else {
             $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams());
             $result = $stmt->execute();

@@ -33,7 +33,7 @@ final class DatabaseTest extends TestCase
             ['name' => 'Second', 'color' => null, 'size' => 2]
         ]);
 
-        $this->assertTrue($result);
+        $this->assertEquals(2, $result);
 
         $result = Query::table('test')->insert(['name' => 'Third', 'size' => 2]);
 
