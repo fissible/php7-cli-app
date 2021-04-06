@@ -326,7 +326,7 @@ class Model implements \JsonSerializable, \Serializable
     public function insert(array $data = [], bool $isSelf = true): bool
     {
         static::getConnection();
-        if (isset($data[0]) && !is_array($data[0])) {
+        if (isset($data[0]) && is_array($data[0])) {
             foreach ($data as $record) {
                 if (false === $this->insert($record, false)) {
                     return false;
