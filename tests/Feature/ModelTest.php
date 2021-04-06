@@ -299,7 +299,10 @@ final class ModelTest extends TestCase
             ['name' => 'First', 'color' => 'red', 'size' => 1],
             ['name' => 'Second', 'color' => null, 'size' => 2],
             ['name' => 'Fourth', 'color' => 'Green', 'size' => 3],
-            ['name' => 'Fifth', 'color' => 'Green', 'size' => 4],
+            ['name' => 'Fifth', 'color' => 'Green', 'size' => 4]
+        ]);
+
+        (new TestModel)->insert([
             ['name' => 'Sixth', 'color' => 'Green', 'size' => 5],
             ['name' => 'Seventh', 'color' => 'Green', 'size' => 6],
             ['name' => 'Eight', 'color' => 'Yellow', 'size' => 7],

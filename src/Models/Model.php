@@ -116,7 +116,24 @@ class Model implements \JsonSerializable, \Serializable
 
         if (isset($this->dirty[$name])) {
             $value = $this->dirty[$name];
-        } elseif (isset($this->attributes[$name])) {
+        } else {
+            $value = $this->getOriginal($name);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Get an attribute value.
+     * 
+     * @param string $name
+     * @return mixed
+     */
+    public function getOriginal(string $name)
+    {
+        $value = null;
+
+        if (isset($this->attributes[$name])) {
             $value = $this->attributes[$name];
         }
 
@@ -306,9 +323,17 @@ class Model implements \JsonSerializable, \Serializable
         return !empty($this->dirty);
     }
 
-    public function insert(array $data = []): bool
+    public function insert(array $data = [], bool $isSelf = true): bool
     {
         static::getConnection();
+        if (isset($data[0]) && !is_array($data[0])) {
+            foreach ($data as $record) {
+                if (false === $this->insert($record, false)) {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         if (empty($data)) {
             $data = $this->attributes;
@@ -327,12 +352,14 @@ class Model implements \JsonSerializable, \Serializable
         }
 
         if ($id = Query::table(static::getTable())->insert($data, static::CREATED_FIELD)) {
-            if (static::$primaryKeyType === 'int') {
-                $id = intval($id);
+            if ($isSelf) {
+                if (static::$primaryKeyType === 'int') {
+                    $id = intval($id);
+                }
+                $this->attributes[static::$primaryKey] = $id;
+                $this->exists = true;
+                $this->refresh();
             }
-            $this->attributes[static::$primaryKey] = $id;
-            $this->exists = true;
-            $this->refresh();
 
             return true;
         }
