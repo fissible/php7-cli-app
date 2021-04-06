@@ -323,16 +323,19 @@ class Model implements \JsonSerializable, \Serializable
         return !empty($this->dirty);
     }
 
-    public function insert(array $data = [], bool $isSelf = true): bool
+    public function insert(array $data = []): bool
     {
         static::getConnection();
         if (isset($data[0]) && is_array($data[0])) {
-            foreach ($data as $record) {
-                if (false === $this->insert($record, false)) {
-                    return false;
+            // Un-cast
+            foreach ($this->getDateFields() as $field) {
+                foreach ($data as $key => $record) {
+                    if (isset($record[$field]) && $record[$field] instanceof \DateTime) {
+                        $data[$key][$field] = $record[$field]->format(static::$dateFormat);
+                    }
                 }
             }
-            return true;
+            return Query::table(static::getTable())->insert($data, static::CREATED_FIELD);
         }
 
         if (empty($data)) {
@@ -352,14 +355,12 @@ class Model implements \JsonSerializable, \Serializable
         }
 
         if ($id = Query::table(static::getTable())->insert($data, static::CREATED_FIELD)) {
-            if ($isSelf) {
-                if (static::$primaryKeyType === 'int') {
-                    $id = intval($id);
-                }
-                $this->attributes[static::$primaryKey] = $id;
-                $this->exists = true;
-                $this->refresh();
+            if (static::$primaryKeyType === 'int') {
+                $id = intval($id);
             }
+            $this->attributes[static::$primaryKey] = $id;
+            $this->exists = true;
+            $this->refresh();
 
             return true;
         }
