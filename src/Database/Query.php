@@ -149,23 +149,23 @@ class Query {
 
         if ($this->isMultiInsert()) {
             $count = 0;
-            $join_params = [];
-            if (isset($this->join)) {
-                $this->join->each(function (Join $join) use (&$join_params) {
-                    $join_params[] = $join->getWhereParameters();
-                });
-            }
+            $join_params = $this->getJoinParams();
             $where_params = $this->getWhereParameters();
             $having_params = $this->getHavingParameters();
             $inTransaction = (bool) static::$db->inTransaction();
             if (!$inTransaction) static::$db->beginTransaction();
             try {
-                foreach ($this->insert as $input_parameters) {
-                    $parameters = array_merge($input_parameters, $join_params, $where_params, $having_params);
-                    $stmt = $this->bindParameters($this->prepareStatement($sql), $parameters);
-                    if ($stmt->execute()) {
-                        $count++;
-                    }
+                foreach ($this->insert as $key => $input_parameters) {
+                    foreach ($input_parameters as $_key => $value) {
+                        $newKey = sprintf(":%d%s", $key, $_key);
+                        $this->insert[$key][$newKey] = $value;
+                        unset($this->insert[$key][$_key]);
+                    };
+                }
+
+                $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams());
+                if ($stmt->execute()) {
+                    $count = $stmt->rowCount();
                 }
                 if (!$inTransaction) static::$db->commit();
             } catch (\Throwable $e) {
@@ -201,16 +201,16 @@ class Query {
     public function getParams(): array
     {
         $input_parameters = [];
-        $join_params = [];
+        $join_params = $this->getJoinParams();
         $where_params = $this->getWhereParameters();
         $having_params = $this->getHavingParameters();
-        if (isset($this->join)) {
-            $this->join->each(function (Join $join) use (&$join_params) {
-                $join_params = array_merge($join_params, $join->getWhereParameters());
-            });
-        }
+
         if (isset($this->insert)) {
-            $input_parameters = $this->insert;
+            if ($this->isMultiInsert()) {
+                $input_parameters = array_merge(...$this->insert);
+            } else {
+                $input_parameters = $this->insert;
+            }
         } elseif (isset($this->update)) {
             $input_parameters = $this->update;
         }
@@ -587,23 +587,39 @@ class Query {
                 }
                 
                 $sql = ltrim(rtrim($sql, ','));
-                $sql .= ') VALUES (';
+                $sql .= ') VALUES ';
 
                 if ($this->isMultiInsert($input_parameters)) {
-                    foreach ($input_parameters[0] as $key => $val) {
-                        $sql .= sprintf(" :%s,", $key);
+                    foreach ($input_parameters as $key => $parameters) {
+                        $sql .= '(';
+                        foreach ($parameters as $_key => $val) {
+                            $sql .= sprintf(":%d%s, ", $key, $_key);
+                        }
+                        if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
+                            $sql .= ' CURRENT_TIMESTAMP';
+                        } else {
+                            $sql = ltrim(rtrim(trim($sql), ','));
+                        }
+                        $sql .= '),';
                     }
+                    $sql = ltrim(rtrim(trim($sql), ','));
                 } else {
+                    $sql .= '(';
                     foreach ($input_parameters as $key => $val) {
-                        $sql .= sprintf(" :%s,", $key);
+                        $sql .= sprintf(":%s, ", $key);
                     }
+                    if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
+                        $sql .= ' CURRENT_TIMESTAMP';
+                    } else {
+                        $sql = ltrim(rtrim(trim($sql), ','));
+                    }
+                    $sql .= ')';
                 }
-                if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
-                    $sql .= ' CURRENT_TIMESTAMP';
-                } else {
-                    $sql = ltrim(rtrim($sql, ','));
-                }
-                $sql .= ')';
+                // if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
+                //     $sql .= ' CURRENT_TIMESTAMP';
+                // } else {
+                    // $sql = ltrim(rtrim(trim($sql), ','));
+                // }
             break;
             break;
             case 'UPDATE':
@@ -734,6 +750,17 @@ class Query {
             if (isset($having[3]) && !empty($having[3])) {
                 $parameters = array_merge($parameters, $having[3]);
             }
+        }
+        return $parameters;
+    }
+
+    private function getJoinParams(): array
+    {
+        $parameters = [];
+        if (isset($this->join)) {
+            $this->join->each(function (Join $join) use (&$parameters) {
+                $parameters = array_merge($parameters, $join->getWhereParameters());
+            });
         }
         return $parameters;
     }
