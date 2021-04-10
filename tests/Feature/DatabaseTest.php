@@ -28,16 +28,18 @@ final class DatabaseTest extends TestCase
 
     public function testQuery()
     {
+        $result = Query::table('test')->insert(['name' => 'First', 'color' => 'red', 'size' => 1]);
+
         $result = Query::table('test')->insert([
-            ['name' => 'First', 'color' => 'red', 'size' => 1],
-            ['name' => 'Second', 'color' => null, 'size' => 2]
+            ['name' => 'Second', 'color' => null, 'size' => 2],
+            ['name' => 'Third', 'size' => 2]
         ]);
 
         $this->assertEquals(2, $result);
 
-        $result = Query::table('test')->insert(['name' => 'Third', 'size' => 2]);
+        $result = Query::table('test')->insert(['name' =>'Fourth', 'color' => 'Brown', 'size' => 4]);
 
-        $this->assertEquals('3', $result);
+        $this->assertEquals('4', $result);
 
         $result = Query::table('test')->where('name', 'Third')->update(['size' => 2]);
 
@@ -107,7 +109,7 @@ final class DatabaseTest extends TestCase
         
         $this->assertNull($row);
 
-        Query::table('test')->insert([
+        $result = Query::table('test')->insert([
             ['name' => 'Fourth', 'color' => 'Green', 'size' => 3],
             ['name' => 'Fifth', 'color' => 'Green', 'size' => 4],
             ['name' => 'Sixth', 'color' => 'Green', 'size' => 5],
@@ -116,6 +118,8 @@ final class DatabaseTest extends TestCase
             ['name' => 'Ninth', 'color' => 'Green', 'size' => 8],
             ['name' => 'Tenth', 'color' => 'Green', 'size' => 9]
         ]);
+
+        $this->assertEquals(7, $result);
 
         $rows = Query::table('test')
             ->whereBetween('size', [3, 5])

@@ -35,6 +35,8 @@ class Query {
 
     protected array $order;
 
+    protected int $rowCount;
+
     protected array $select = ['*'];
 
     protected string $type = 'SELECT';
@@ -81,13 +83,14 @@ class Query {
 
     public static function transaction(callable $callback)
     {
+        $inTransaction = (bool) static::$db->inTransaction();
         $return = null;
         try {
-            static::$db->beginTransaction();
+            if (!$inTransaction) static::$db->beginTransaction();
             $return = $callback();
-            static::$db->commit();
+            if (!$inTransaction) static::$db->commit();
         } catch (\Throwable $e) {
-            static::$db->rollBack();
+            if (!$inTransaction) static::$db->rollBack();
             throw $e;
         }
         return $return;
@@ -132,10 +135,13 @@ class Query {
     }
 
     /**
-     * return:
-     *  \PDOStatement
-     *  bool
-     *  int
+     * Executes supplied SQL and returns:
+     *  \PDOStatement - SELECT statements
+     *  string        - INSERT statements (single row)
+     *  int           - INSERT statements (multiple rows)
+     *  boolean       - UPDATE, DELETE, all other statements
+     * 
+     * @return mixed
      */
     public function exe(string $sql)
     {
@@ -147,35 +153,21 @@ class Query {
             throw new \RuntimeException('Subquery cannot be executed independently.');
         }
 
-        if ($this->isMultiInsert()) {
-            $count = 0;
-            $join_params = $this->getJoinParams();
-            $where_params = $this->getWhereParameters();
-            $having_params = $this->getHavingParameters();
-            $inTransaction = (bool) static::$db->inTransaction();
-            if (!$inTransaction) static::$db->beginTransaction();
-            try {
-                foreach ($this->insert as $key => $input_parameters) {
-                    foreach ($input_parameters as $_key => $value) {
-                        $newKey = sprintf(":%d%s", $key, $_key);
-                        $this->insert[$key][$newKey] = $value;
-                        unset($this->insert[$key][$_key]);
-                    };
-                }
+        $this->rowCount = 0;
 
+        if ($this->isMultiInsert()) {
+            return static::transaction(function () use ($sql) {
                 $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams());
                 if ($stmt->execute()) {
-                    $count = $stmt->rowCount();
+                    $this->rowCount = $stmt->rowCount();
                 }
-                if (!$inTransaction) static::$db->commit();
-            } catch (\Throwable $e) {
-                if (!$inTransaction) static::$db->rollBack();
-                throw $e;
-            }
-            return $count;
+                return $this->rowCount;
+            });
         } else {
             $stmt = $this->bindParameters($this->prepareStatement($sql), $this->getParams());
-            $result = $stmt->execute();
+            if ($result = $stmt->execute()) {
+                $this->rowCount = $stmt->rowCount();
+            }
         }
 
         if (substr($sql, 0, 6) === 'SELECT') {
@@ -189,6 +181,11 @@ class Query {
         return $result;
     }
 
+    /**
+     * Set the table(s) to SELECT from.
+     * 
+     * @return self
+     */
     public function from(): self
     {
         $this->tables = func_get_args();
@@ -206,10 +203,17 @@ class Query {
         $having_params = $this->getHavingParameters();
 
         if (isset($this->insert)) {
+            $input_parameters = $this->insert;
             if ($this->isMultiInsert()) {
-                $input_parameters = array_merge(...$this->insert);
-            } else {
-                $input_parameters = $this->insert;
+                foreach ($input_parameters as $rkey => $insertRow) {
+                    foreach ($insertRow as $field => $value) {
+                        // Must match keying in compileQuery
+                        $newKey = sprintf(":%d%s", $rkey, $field);
+                        $input_parameters[$rkey][$newKey] = $value;
+                        unset($input_parameters[$rkey][$field]);
+                    }
+                }
+                $input_parameters = array_merge(...$input_parameters);
             }
         } elseif (isset($this->update)) {
             $input_parameters = $this->update;
@@ -232,6 +236,17 @@ class Query {
             $sql = str_replace($key, $value, $sql);
         }
         return $sql;
+    }
+
+    /**
+     * @return int
+     */
+    public function rowCount(): int
+    {
+        if (isset($this->rowCount)) {
+            return $this->rowCount;
+        }
+        return -1;
     }
 
     private function prepareStatement(string $sql): \PDOStatement
@@ -347,6 +362,10 @@ class Query {
      */
     public function insert(array $data, ?string $createdField = null)
     {
+        if ($this->isMultiInsert($data)) {
+            $data = $this->normalizeMultiInsertArray($data);
+        }
+        
         $this->insert = $data;
         $this->createdField = $createdField;
         $this->type = 'INSERT';
@@ -487,6 +506,48 @@ class Query {
         return $this;
     }
 
+    public function setTable(string $table): self
+    {
+        $this->table = $table;
+        return $this;
+    }
+
+    /**
+     * Multi-dimensional array needs to have the same keys in the same
+     * order for each member. Missing keys will be inserted (according the
+     * order of the first member) and set to null.
+     * 
+     * @param array $data
+     * @return array
+     */
+    private function normalizeMultiInsertArray(array $data): array
+    {
+        // Pad missing columns to avoid "all VALUES must have the same number of terms" SQLError.
+        $columns = [];
+        foreach ($data as $rkey => $input_parameters) {
+            foreach ($input_parameters as $column => $value) {
+                if (!in_array($column, $columns)) $columns[] = $column;
+            }
+        }
+        $columnCount = count($columns);
+        foreach ($data as $key => $input_parameters) {
+            // If this row is missing a key, add it and set null
+            if (count($input_parameters) < $columnCount) {
+                foreach ($columns as $column) {
+                    if (!array_key_exists($column, $input_parameters)) {
+                        $data[$key][$column] = null;
+                    }
+                }
+            }
+            // Reorder row keys to match first row
+            if ($key > 0) {
+                $data[$key] = array_replace($data[0], $data[$key]);
+            }
+        }
+
+        return $data;
+    }
+
     /**
      * @param Query $query
      * @return self
@@ -494,12 +555,6 @@ class Query {
     private function setParent(Query $query): self
     {
         $this->parent = $query;
-        return $this;
-    }
-
-    public function setTable(string $table): self
-    {
-        $this->table = $table;
         return $this;
     }
 
@@ -575,51 +630,45 @@ class Query {
                 
                 if ($this->isMultiInsert($input_parameters)) {
                     foreach ($input_parameters[0] as $key => $val) {
-                        $sql .= sprintf(" `%s`,", $key);
+                        $sql .= sprintf("`%s`, ", $key);
                     }
                 } else {
                     foreach ($input_parameters as $key => $val) {
-                        $sql .= sprintf(" `%s`,", $key);
+                        $sql .= sprintf("`%s`, ", $key);
                     }
                 }
                 if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
-                    $sql .= sprintf(" `%s`,", $this->createdField);
+                    $sql .= sprintf("`%s`, ", $this->createdField);
                 }
                 
-                $sql = ltrim(rtrim($sql, ','));
+                $sql = rtrim(trim($sql), ',');
                 $sql .= ') VALUES ';
 
                 if ($this->isMultiInsert($input_parameters)) {
                     foreach ($input_parameters as $key => $parameters) {
                         $sql .= '(';
                         foreach ($parameters as $_key => $val) {
+                            // Must match keying in getParams()
                             $sql .= sprintf(":%d%s, ", $key, $_key);
                         }
                         if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
-                            $sql .= ' CURRENT_TIMESTAMP';
-                        } else {
-                            $sql = ltrim(rtrim(trim($sql), ','));
+                            $sql .= 'CURRENT_TIMESTAMP, ';
                         }
-                        $sql .= '),';
+                        $sql = rtrim(trim($sql), ',');
+                        $sql .= '), ';
                     }
-                    $sql = ltrim(rtrim(trim($sql), ','));
+                    $sql = rtrim(trim($sql), ',');
                 } else {
                     $sql .= '(';
                     foreach ($input_parameters as $key => $val) {
                         $sql .= sprintf(":%s, ", $key);
                     }
                     if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
-                        $sql .= ' CURRENT_TIMESTAMP';
-                    } else {
-                        $sql = ltrim(rtrim(trim($sql), ','));
+                        $sql .= 'CURRENT_TIMESTAMP, ';
                     }
+                    $sql = rtrim(trim($sql), ',');
                     $sql .= ')';
                 }
-                // if (isset($this->createdField) && !isset($input_parameters[$this->createdField])) {
-                //     $sql .= ' CURRENT_TIMESTAMP';
-                // } else {
-                    // $sql = ltrim(rtrim(trim($sql), ','));
-                // }
             break;
             break;
             case 'UPDATE':
