@@ -166,7 +166,7 @@ class Menu
     {
         $label = $this->label ?? 'name';
 
-        array_walk_recursive($items, function (&$description, $command) {
+        array_walk_recursive($items, function (&$description, $command) use ($label) {
             if (!is_scalar($description)) {
                 if (is_object($description)) {
                     $description = $description->$label;
