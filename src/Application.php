@@ -667,9 +667,9 @@ class Application
      * @param string|null $prompt
      * @param string|null $title
      * @param bool $returnValue
-     * @return string|null
+     * @return string|int|null
      */
-    public function menuPrompt($nameOrOptions, string $prompt = null, string $title = null, bool $returnValue = false): ?string
+    public function menuPrompt($nameOrOptions, string $prompt = null, string $title = null, bool $returnValue = false)
     {
         $Menu = $this->menu($nameOrOptions, $title);
         $Menu->setReturnValue($returnValue);
