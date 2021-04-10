@@ -639,6 +639,9 @@ class Application
      */
     public function menu($nameOrOptions, string $title = null, string $prompt = null, string $label = null): Menu
     {
+        if ($nameOrOptions instanceof Collection) {
+            $nameOrOptions = $nameOrOptions->toArray();
+        }
         if (is_array($nameOrOptions)) {
             $Menu = new Menu($this, $nameOrOptions, $prompt, $label);
         } elseif (is_string($nameOrOptions)) {
