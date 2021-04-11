@@ -66,7 +66,9 @@ class Model implements \JsonSerializable, \Serializable
             ));
         }
         $instance = static::newInstance();
-        return $instance->insertInternal($attributes);
+        $instance->insertInternal($attributes);
+
+        return $instance;
     }
 
     public static function find($id)
@@ -504,15 +506,12 @@ class Model implements \JsonSerializable, \Serializable
         }
 
         $attributes = $this->dirty;
-
         if (static::UPDATED_FIELD && array_key_exists(static::UPDATED_FIELD, $attributes)) {
             unset($attributes[static::UPDATED_FIELD]);
         }
         unset($attributes[static::$primaryKey]);
 
-        $query = static::newQuery();
-        $query->where(static::$primaryKey, $this->primaryKey());
-
+        $query = static::newQuery()->where(static::$primaryKey, $this->primaryKey());
         if ($query->update($this->uncastAttributes($attributes), static::UPDATED_FIELD)) {
             $this->refresh();
 

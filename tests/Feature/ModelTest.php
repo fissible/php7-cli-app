@@ -138,6 +138,27 @@ final class ModelTest extends TestCase
         $this->assertTrue($Model->isDirty());
     }
 
+    public function testCreate()
+    {
+        $db = $this->setUpDatabase();
+
+        $db->exec('CREATE TABLE IF NOT EXISTS model (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR (30) NOT NULL,
+            created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
+            updated_at TIMESTAMP
+        )');
+
+        Query::setDriver($db);
+
+        $Model = Model::create(['name' => 'HasName']);
+
+        $this->assertTrue($Model->exists());
+        $this->assertTrue(is_int($Model->id));
+
+        $this->assertEquals(date('Y-m-d H:i'), $Model->created_at->format('Y-m-d H:i'));
+    }
+
     public function testInsert()
     {
         $db = $this->setUpDatabase();
