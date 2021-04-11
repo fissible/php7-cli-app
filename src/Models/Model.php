@@ -328,38 +328,23 @@ class Model implements \JsonSerializable, \Serializable
      *  bool
      *  int
      */
-    public function insert(array $data = [])
+    public function insertInternal(array $data = [])
     {
         static::getConnection();
+        $query = Query::table(static::getTable());
+
         if (isset($data[0]) && is_array($data[0])) {
-            // Un-cast
-            foreach ($this->getDateFields() as $field) {
-                foreach ($data as $key => $record) {
-                    if (isset($record[$field]) && $record[$field] instanceof \DateTime) {
-                        $data[$key][$field] = $record[$field]->format(static::$dateFormat);
-                    }
-                }
-            }
-            return Query::table(static::getTable())->insert($data, static::CREATED_FIELD);
+            return $query->insert($this->uncastAttributes($data), static::CREATED_FIELD);
         }
 
         if (empty($data)) {
             $data = $this->attributes;
             unset($data[static::$primaryKey]);
-        }
-
-        if (isset($data[static::$primaryKey])) {
+        } elseif (isset($data[static::$primaryKey])) {
             throw new \InvalidArgumentException('Data includes primary key value.');
         }
 
-        // Un-cast
-        foreach ($this->getDateFields() as $field) {
-            if (isset($data[$field]) && $data[$field] instanceof \DateTime) {
-                $data[$field] = $data[$field]->format(static::$dateFormat);
-            }
-        }
-
-        if ($id = Query::table(static::getTable())->insert($data, static::CREATED_FIELD)) {
+        if ($id = $query->insert($this->uncastAttributes($data), static::CREATED_FIELD)) {
             if (static::$primaryKeyType === 'int') {
                 $id = intval($id);
             }
@@ -490,17 +475,10 @@ class Model implements \JsonSerializable, \Serializable
         }
         unset($data[static::$primaryKey]);
 
-        // Un-cast
-        foreach ($this->getDateFields() as $field) {
-            if (isset($data[$field]) && $data[$field] instanceof \DateTime) {
-                $data[$field] = $data[$field]->format(static::$dateFormat);
-            }
-        }
-
         $query = Query::table(static::getTable());
         $query->where(static::$primaryKey, $this->primaryKey());
 
-        if ($query->update($data, static::UPDATED_FIELD)) {
+        if ($query->update($this->uncastAttributes($data), static::UPDATED_FIELD)) {
             $this->refresh();
 
             return true;
@@ -597,6 +575,32 @@ class Model implements \JsonSerializable, \Serializable
         return $this;
     }
 
+    /**
+     * Prepare array of attributes for database storage.
+     * 
+     * @param array $data
+     */
+    protected function uncastAttributes(array $attributes)
+    {
+        if (isset($attributes[0]) && is_array($attributes[0])) {
+            foreach ($this->getDateFields() as $field) {
+                foreach ($attributes as $key => $record) {
+                    if (isset($record[$field]) && $record[$field] instanceof \DateTime) {
+                        $attributes[$key][$field] = $record[$field]->format(static::$dateFormat);
+                    }
+                }
+            }
+        } else {
+            foreach ($this->getDateFields() as $field) {
+                if (isset($attributes[$field]) && $attributes[$field] instanceof \DateTime) {
+                    $attributes[$field] = $attributes[$field]->format(static::$dateFormat);
+                }
+            }
+        }
+
+        return $attributes;
+    }
+
     private function getQuery()
     {
         if (!isset($this->query)) {
@@ -616,6 +620,9 @@ class Model implements \JsonSerializable, \Serializable
 
     public function __call($name, $arguments)
     {
+        if ($name === 'insert') {
+            return call_user_func_array(array($this, 'insertInternal'), $arguments);
+        }
         $result = static::callQuery($this, $name, ...$arguments);
         if (!($result instanceof Query)) {
             return $result;
@@ -627,6 +634,9 @@ class Model implements \JsonSerializable, \Serializable
     public static function __callStatic($name, $arguments)
     {
         $instance = static::newInstance();
+        if ($name === 'insert') {
+            return call_user_func_array(array($instance, 'insertInternal'), $arguments);
+        }
         $result = static::callQuery($instance, $name, ...$arguments);
         if (!($result instanceof Query)) {
             return $result;
