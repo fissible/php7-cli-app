@@ -58,6 +58,17 @@ class Model implements \JsonSerializable, \Serializable
         }
     }
 
+    public static function create(array $attributes = []): Model
+    {
+        if (isset($attributes[0]) && is_array($attributes[0])) {
+            throw new \InvalidArgumentException(sprintf(
+                'Models must be created on at a time. Use %s::insert() for inserting multiple records.', get_called_class()
+            ));
+        }
+        $instance = static::newInstance();
+        return $instance->insertInternal($attributes);
+    }
+
     public static function find($id)
     {
         static::getConnection();
@@ -81,6 +92,12 @@ class Model implements \JsonSerializable, \Serializable
     public static function newInstance($attributes = []): Model
     {
         return new static($attributes, static::getConnection());
+    }
+
+    public static function newQuery(): Query
+    {
+        Query::setDriver(static::getConnection());
+        return Query::table(static::getTable());
     }
 
     public function first()
@@ -324,27 +341,25 @@ class Model implements \JsonSerializable, \Serializable
     }
 
     /**
-     * return:
-     *  bool
-     *  int
+     * Insert a new record.
+     * 
+     * @param array $attributes
+     * @return mixed
      */
-    public function insertInternal(array $data = [])
+    protected function insertInternal(array $attributes = []): bool
     {
-        static::getConnection();
-        $query = Query::table(static::getTable());
-
-        if (isset($data[0]) && is_array($data[0])) {
-            return $query->insert($this->uncastAttributes($data), static::CREATED_FIELD);
+        if (isset($attributes[0]) && is_array($attributes[0])) {
+            throw new \InvalidArgumentException(__METHOD__.' must be used to insert one record at a time.');
         }
 
-        if (empty($data)) {
-            $data = $this->attributes;
-            unset($data[static::$primaryKey]);
-        } elseif (isset($data[static::$primaryKey])) {
+        if (empty($attributes)) {
+            $attributes = $this->attributes;
+            unset($attributes[static::$primaryKey]);
+        } elseif (isset($attributes[static::$primaryKey])) {
             throw new \InvalidArgumentException('Data includes primary key value.');
         }
 
-        if ($id = $query->insert($this->uncastAttributes($data), static::CREATED_FIELD)) {
+        if ($id = static::newQuery()->insert($this->uncastAttributes($attributes), static::CREATED_FIELD)) {
             if (static::$primaryKeyType === 'int') {
                 $id = intval($id);
             }
@@ -356,6 +371,17 @@ class Model implements \JsonSerializable, \Serializable
         }
 
         return false;
+    }
+
+    /**
+     * Insert multiple rows at once. Returns the number of affected rows.
+     * 
+     * @param array $records
+     * @return int
+     */
+    protected function multiInsert(array $records): int
+    {
+        return static::newQuery()->insert($this->uncastAttributes($records), static::CREATED_FIELD);
     }
 
     public function jsonSerialize()
@@ -409,12 +435,17 @@ class Model implements \JsonSerializable, \Serializable
         return $this;
     }
 
-    public function save()
+    /**
+     * Create or update the instance.
+     *
+     * @return bool
+     */
+    public function save(): bool
     {
         if ($this->exists()) {
             return $this->update();
         } else {
-            return $this->insert();
+            return $this->insertInternal();
         }
     }
 
@@ -452,12 +483,16 @@ class Model implements \JsonSerializable, \Serializable
         $this->dirty = $dirty;
     }
 
-    public function update(array $data = []): bool
+    /**
+     * @param array $attributes
+     * @return bool
+     */
+    public function update(array $attributes = []): bool
     {
         static::getConnection();
 
-        if (!empty($data)) {
-            foreach ($data as $key => $val) {
+        if (!empty($attributes)) {
+            foreach ($attributes as $key => $val) {
                 if ($this->attributes[$key] !== $val) {
                     $this->dirty[$key] = $val;
                 }
@@ -468,17 +503,17 @@ class Model implements \JsonSerializable, \Serializable
             return true;
         }
 
-        $data = $this->dirty;
+        $attributes = $this->dirty;
 
-        if (static::UPDATED_FIELD && array_key_exists(static::UPDATED_FIELD, $data)) {
-            unset($data[static::UPDATED_FIELD]);
+        if (static::UPDATED_FIELD && array_key_exists(static::UPDATED_FIELD, $attributes)) {
+            unset($attributes[static::UPDATED_FIELD]);
         }
-        unset($data[static::$primaryKey]);
+        unset($attributes[static::$primaryKey]);
 
-        $query = Query::table(static::getTable());
+        $query = static::newQuery();
         $query->where(static::$primaryKey, $this->primaryKey());
 
-        if ($query->update($this->uncastAttributes($data), static::UPDATED_FIELD)) {
+        if ($query->update($this->uncastAttributes($attributes), static::UPDATED_FIELD)) {
             $this->refresh();
 
             return true;
@@ -604,7 +639,7 @@ class Model implements \JsonSerializable, \Serializable
     private function getQuery()
     {
         if (!isset($this->query)) {
-            $this->query = Query::table(static::getTable());
+            $this->query = static::newQuery();
         }
         return $this->query;
     }
@@ -621,6 +656,9 @@ class Model implements \JsonSerializable, \Serializable
     public function __call($name, $arguments)
     {
         if ($name === 'insert') {
+            if (isset($arguments[0]) && isset($arguments[0][0]) && is_array($arguments[0][0])) {
+                return $this->multiInsert($arguments[0]);
+            }
             return $this->insertInternal(...$arguments);
         }
         $result = static::callQuery($this, $name, ...$arguments);
@@ -635,6 +673,9 @@ class Model implements \JsonSerializable, \Serializable
     {
         $instance = static::newInstance();
         if ($name === 'insert') {
+            if (isset($arguments[0]) && isset($arguments[0][0]) && is_array($arguments[0][0])) {
+                return $instance->multiInsert($arguments[0]);
+            }
             return $instance->insertInternal(...$arguments);
         }
         $result = static::callQuery($instance, $name, ...$arguments);
