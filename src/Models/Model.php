@@ -621,7 +621,7 @@ class Model implements \JsonSerializable, \Serializable
     public function __call($name, $arguments)
     {
         if ($name === 'insert') {
-            return call_user_func_array(array($this, 'insertInternal'), $arguments);
+            return $this->insertInternal(...$arguments);
         }
         $result = static::callQuery($this, $name, ...$arguments);
         if (!($result instanceof Query)) {
@@ -635,7 +635,7 @@ class Model implements \JsonSerializable, \Serializable
     {
         $instance = static::newInstance();
         if ($name === 'insert') {
-            return call_user_func_array(array($instance, 'insertInternal'), $arguments);
+            return $instance->insertInternal(...$arguments);
         }
         $result = static::callQuery($instance, $name, ...$arguments);
         if (!($result instanceof Query)) {
