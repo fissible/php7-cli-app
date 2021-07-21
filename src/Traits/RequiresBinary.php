@@ -2,6 +2,10 @@
 
 namespace PhpCli\Traits;
 
+/**
+ * Methods for checking for the existance of a binary and for excepting if a
+ * given binary is not found.
+ */
 trait RequiresBinary
 {
     private static array $hasBinary = [];
