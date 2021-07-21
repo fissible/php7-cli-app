@@ -2,7 +2,6 @@
 
 namespace PhpCli\Database\Drivers;
 
-use PhpCli\Exceptions\ConfigurationException;
 use PhpCli\Filesystem\File;
 use PhpCli\Traits\HasConfig;
 

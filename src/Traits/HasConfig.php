@@ -3,6 +3,7 @@
 namespace PhpCli\Traits;
 
 use PhpCli\Config;
+use PhpCli\Exceptions\ConfigurationException;
 
 trait HasConfig
 {
