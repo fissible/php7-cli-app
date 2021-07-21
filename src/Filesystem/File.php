@@ -226,11 +226,12 @@ class File {
 
     /**
      * @param string $contents
+     * @param bool $append
      * @return int|false
      */
-    public function write(string $contents)
+    public function write(string $contents, bool $append = false)
     {
-        return file_put_contents($this->path, $contents);
+        return file_put_contents($this->path, $contents, $append ? FILE_APPEND : 0);
     }
 
 
