@@ -81,6 +81,12 @@ class Config
         }
     }
 
+    public function setData(array $data): self
+    {
+        $this->data = $data;
+        return $this;
+    }
+
     public function setFile(string $filepath): self
     {
         $this->File = new File($filepath);
@@ -109,7 +115,7 @@ class Config
         }
 
         $contents = $this->File->read();
-        $this->data = json_decode($contents, true, 256, JSON_THROW_ON_ERROR);
+        $this->setData(json_decode($contents, true, 256, JSON_THROW_ON_ERROR));
 
         return $this;
     }
