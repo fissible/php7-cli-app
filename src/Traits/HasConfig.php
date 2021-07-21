@@ -2,9 +2,17 @@
 
 namespace PhpCli\Traits;
 
+use PhpCli\Config;
+
 trait HasConfig
 {
-    protected array $config;
+    protected Config $Config;
+
+    public function setConfig(array $config)
+    {
+        $this->Config = new Config();
+        $this->Config->setData($config);
+    }
 
     /**
      * Throw an exception if a config key is missing.
@@ -17,7 +25,7 @@ trait HasConfig
         if (false !== strpos($key, '|')) {
             $ors = explode('|', key);
             $exists = array_map(function ($key) {
-                return isset($this->config[$key]);
+                return $this->Config->has($key);
             }, $ors);
 
             if (count($ors) < 1) {
@@ -29,7 +37,7 @@ trait HasConfig
                 $this->requireConfigKey($key);
             }
         } else {
-            if (!isset($this->config[$key])) {
+            if (!$this->Config->has($key)) {
                 throw new ConfigurationException('', $key);
             }
         }

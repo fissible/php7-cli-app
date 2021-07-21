@@ -51,6 +51,11 @@ class Config
         return null;
     }
 
+    public function has(string $name): bool
+    {
+        return isset($this->data[$name]);
+    }
+
     public function persist()
     {
         $contents = json_encode($this->data, JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR, 256);
@@ -98,6 +103,11 @@ class Config
         if (isset($this->data[$name])) {
             return $this->data[$name];
         }
+    }
+
+    public function __isset($name): bool
+    {
+        return isset($this->data[$name]);
     }
 
     public function __set(string $name, $value) 

@@ -14,7 +14,7 @@ class Driver
 
     public function __construct(array $config)
     {
-        $this->config = $config;
+        $this->setConfig($config);
     }
 
     /**
@@ -26,7 +26,7 @@ class Driver
         $driver = new Driver($config);
         $driver->requireConfigKey('driver');
 
-        switch ($driver->config['driver']) {
+        switch ($driver->Config->driver) {
             case 'mysql':
                 return Mysql::create($config);
             break;
@@ -55,7 +55,7 @@ class Driver
             'password' => $password
         ]);
 
-        return new \PDO($driver->config['driver'].':'.$dsn, $username, $password, [
+        return new \PDO($driver->Config->driver.':'.$dsn, $username, $password, [
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION
         ]);
     }

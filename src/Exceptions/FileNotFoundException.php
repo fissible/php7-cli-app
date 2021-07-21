@@ -4,11 +4,11 @@ namespace PhpCli\Exceptions;
 
 use Exception;
 
-class ConfigNotFoundException extends FileNotFoundException
+class FileNotFoundException extends Exception
 {
     public function __construct($path, Exception $previous = null)
     {
-        $message = sprintf('Config file "%s" not found', $path);
+        $message = sprintf('File "%s" not found', $path);
         parent::__construct($message, 0, $previous);
     }
 }

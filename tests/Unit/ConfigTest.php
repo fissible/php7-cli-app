@@ -52,7 +52,11 @@ final class ConfigTest extends TestCase
         $bytes = $Config->persist();
 
         $this->assertGreaterThan(0, $bytes);
+
+        $Config = new Config($this->path);
+
         $this->assertTrue($Config->exists());
+        $this->assertEquals('value', $Config->test);
         $this->assertTrue($Config->getFile()->delete());
         $this->assertFalse($Config->exists());
     }
@@ -72,5 +76,29 @@ final class ConfigTest extends TestCase
         $Config->test = $value;
 
         $this->assertEquals($value, $Config->test);
+
+        $database = [
+            'driver' => 'postgres',
+            'username' => 'root',
+            'password' => '123'
+        ];
+        $Config->database = $database;
+
+        $this->assertEquals($database['driver'], $Config->get('database.driver'));
+        $this->assertEquals($database, $Config->get('database'));
+        $this->assertEquals($database, $Config->database);
+
+        $Config->set('database.password', 'abc');
+
+        $this->assertEquals('abc', $Config->get('database.password'));
+
+        $Config->set('database', [
+            'driver' => 'mysql',
+            'username' => 'user',
+            'password' => '123'
+        ]);
+
+        $this->assertEquals('mysql', $Config->get('database.driver'));
+        $this->assertEquals('123', $Config->get('database.password'));
     }
 }

@@ -18,6 +18,54 @@ final class FileTest extends TestCase
         $this->File = new File($this->path);
     }
 
+    public function testChmodFail()
+    {
+        $this->expectException(\PhpCli\Exceptions\FileNotFoundException::class);
+
+        $this->File->chmod(0777);
+    }
+
+    public function testChmod()
+    {
+        $this->assertTrue(touch($this->path));
+        $this->assertTrue($this->File->chmod(0777));
+    }
+
+    public function testExists()
+    {
+        $this->assertFalse($this->File->exists());
+
+        $UnitDir = new File(__DIR__);
+
+        $this->assertTrue($UnitDir->exists());
+    }
+
+    public function testFiles()
+    {
+        $UnitDir = new File(__DIR__);
+
+        $this->assertTrue($UnitDir->isDir());
+
+        $this->assertNotEmpty($UnitDir->files());
+    }
+
+    public function testFilesMatch()
+    {
+        $UnitDir = new File(__DIR__);
+
+        $OptionTestFiles = $UnitDir->filesMatch(function ($File) {
+            return preg_match('/\AOption/', $File->getFilename()) === 1;
+        });
+
+        $fileNames = array_map(function ($File) {
+            return $File->getFilename();
+        }, $OptionTestFiles);
+
+        $this->assertContains('OptionTest.php', $fileNames);
+        $this->assertContains('OptionsTest.php', $fileNames);
+        $this->assertNotContains('FileTest.php', $fileNames);
+    }
+
     public function testLines()
     {
         $fileLines = [

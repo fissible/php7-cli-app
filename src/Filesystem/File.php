@@ -2,6 +2,8 @@
 
 namespace PhpCli\Filesystem;
 
+use PhpCli\Exceptions\FileNotFoundException;
+
 class File {
 
     private string $path;
@@ -17,9 +19,30 @@ class File {
         $this->setPath($path);
     }
 
-    public function chmod(int $mode)
+    public function chmod(int $mode): bool
     {
-        return chmod($this->path, $mode);
+        if (!$this->exists()) {
+            throw new FileNotFoundException($this->path);
+        }
+
+        $changed = chmod($this->path, $mode);
+        clearstatcache();
+
+        return $changed;
+    }
+
+    public function create(int $mode = 0777): bool
+    {
+        if ($this->exists()) {
+            throw new \Exception(sprintf('File at path "%s" already exists.', $this->path));
+        }
+
+        if ($this->isDir()) {
+            return mkdir($this->path, $mode);
+        } elseif (touch($this->path)) {
+            return $this->chmod($mode);
+        }
+        return false;
     }
 
     public function delete(): bool
@@ -27,7 +50,7 @@ class File {
         return unlink($this->path);
     }
 
-    public function exists()
+    public function exists(): bool
     {
         return file_exists($this->path);
     }
@@ -35,18 +58,24 @@ class File {
     /**
      * @return array
      */
-    public function files()
+    public function files(): array
     {
+        if (!$this->exists()) {
+            throw new FileNotFoundException($this->path);
+        }
+
         if (!$this->isDir()) {
             throw new \InvalidArgumentException('This file is not a directory.');
         }
+
+        $results = [];
 
         foreach (scandir($this->path) as $value) {
             if ($value === "." || $value === "..") {
                 continue;
             }
 
-            $File = new File($value);
+            $File = new File($this->path.DIRECTORY_SEPARATOR.$value);
             if ($File->exists()) {
                 $results[] = $File;
             }
@@ -56,17 +85,27 @@ class File {
     }
 
     /**
-     * @param string $dir
      * @param callable $matcher
      * @return array
      */
-    public function filesMatch(string $dir, callable $matcher): array
+    public function filesMatch(callable $matcher): array
     {
-        $results = array_filter($this->files($dir), function ($file) use ($matcher) {
+        $results = array_filter($this->files(), function ($file) use ($matcher) {
             return $matcher($file) === true;
         });
 
         return array_values($results);
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getExtension(): ?string
+    {
+        if (isset($this->info['extension'])) {
+            return $this->info['extension'];
+        }
+        return null;
     }
 
     public function getFilename(): ?string
@@ -81,6 +120,17 @@ class File {
         return $this->path;
     }
 
+    /**
+     * @return string|null
+     */
+    public function getPermissions(): ?string
+    {
+        if (!$this->exists()) {
+            throw new FileNotFoundException($this->path);
+        }
+        return substr(sprintf('%o', fileperms($this->path)), -4);
+    }
+
     public function info(): array
     {
         return $this->info;
@@ -88,6 +138,9 @@ class File {
 
     public function isDir(): bool
     {
+        if (!$this->exists()) {
+            return !isset($this->info['extension']);
+        }
         return is_dir($this->path);
     }
 
@@ -96,6 +149,10 @@ class File {
      */
     public function lines()
     {
+        if (!$this->exists()) {
+            throw new FileNotFoundException($this->path);
+        }
+
         $this->resource = fopen($this->path, 'r');
         if (!$this->resource) throw new \Exception(sprintf('Could not open file %s.', $this->path));
 
@@ -104,19 +161,6 @@ class File {
         }
 
         fclose($this->resource);
-    }
-
-    /**
-     * @param string $path
-     * @return self
-     */
-    public function setPath(string $path): self
-    {
-        $this->path = rtrim($path, DIRECTORY_SEPARATOR);
-        $this->info = pathinfo($path);
-        $this->parts = array_filter(explode(DIRECTORY_SEPARATOR, $this->path));
-
-        return $this;
     }
 
     /**
@@ -169,6 +213,10 @@ class File {
 
     public function read(bool $asArray = false)
     {
+        if (!$this->exists()) {
+            throw new FileNotFoundException($this->path);
+        }
+
         if ($asArray) {
             return file($this->path, FILE_IGNORE_NEW_LINES);
         } else {
@@ -207,5 +255,18 @@ class File {
         if (isset($this->resource) && is_resource($this->resource)) {
             fclose($this->resource);
         }
+    }
+
+    /**
+     * @param string $path
+     * @return self
+     */
+    private function setPath(string $path): self
+    {
+        $this->path = rtrim($path, DIRECTORY_SEPARATOR);
+        $this->info = pathinfo($path);
+        $this->parts = array_filter(explode(DIRECTORY_SEPARATOR, $this->path));
+
+        return $this;
     }
 }
