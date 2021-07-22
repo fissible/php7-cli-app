@@ -5,6 +5,9 @@ namespace PhpCli;
 use PhpCli\Filesystem\File;
 use PhpCli\Traits\RequiresBinary;
 
+/**
+ * Config files are expected to be JSON.
+ */
 class Config
 {
     private $data = [];
@@ -38,9 +41,11 @@ class Config
                 $arr = $arr[$key] ?? null;
             }
             return $arr;
-        } else {
+        } elseif (isset($this->data[$name])) {
             return $this->data[$name];
         }
+
+        return null;
     }
 
     public function getFile(): ?File
@@ -124,9 +129,6 @@ class Config
             throw new \LogicException(sprintf('File "%s" not found.', $this->File->getPath()));
         }
 
-        $contents = $this->File->read();
-        $this->setData(json_decode($contents, true, 256, JSON_THROW_ON_ERROR));
-
-        return $this;
+        return $this->setData(json_decode($this->File->read(), true, 256, JSON_THROW_ON_ERROR));
     }
 }
