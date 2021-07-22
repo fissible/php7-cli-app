@@ -3,13 +3,15 @@
 namespace PhpCli\Database;
 
 use PhpCli\Collection;
+use PhpCli\Database\Driver as DatabaseDriver;
 use PhpCli\Database\Grammar\Join;
 use PhpCli\Exceptions\QueryException;
 use PhpCli\Traits\Database\Where;
+use PhpCli\Traits\RequiresServiceContainer;
 
 class Query {
 
-    use Where;
+    use Where, RequiresServiceContainer;
 
     private static \PDO $db;
 
@@ -47,11 +49,8 @@ class Query {
 
     protected ?string $updatedField;
 
-    public function __construct(\PDO $db = null, Query $parent = null)
+    public function __construct(Query $parent = null)
     {
-        if ($db) {
-            static::setDriver($db);
-        }
         if ($parent) {
             $this->setParent($parent);
         }
@@ -59,9 +58,7 @@ class Query {
 
     public static function driver(): ?\PDO
     {
-        if (isset(static::$db)) {
-            return static::$db;
-        }
+        return self::app()->instance(DatabaseDriver::class);
     }
 
     public static function raw($value): \stdClass
@@ -71,11 +68,6 @@ class Query {
         return $raw;
     }
 
-    public static function setDriver(\PDO $db)
-    {
-        static::$db = $db;
-    }
-
     public static function table(string $table): Query
     {
         return (new static())->setTable($table);
@@ -83,14 +75,14 @@ class Query {
 
     public static function transaction(callable $callback)
     {
-        $inTransaction = (bool) static::$db->inTransaction();
+        $inTransaction = (bool) static::driver()->inTransaction();
         $return = null;
         try {
-            if (!$inTransaction) static::$db->beginTransaction();
+            if (!$inTransaction) static::driver()->beginTransaction();
             $return = $callback();
-            if (!$inTransaction) static::$db->commit();
+            if (!$inTransaction) static::driver()->commit();
         } catch (\Throwable $e) {
-            if (!$inTransaction) static::$db->rollBack();
+            if (!$inTransaction) static::driver()->rollBack();
             throw $e;
         }
         return $return;
@@ -119,7 +111,7 @@ class Query {
         $this->type = 'COUNT';
         $statement = $this->exe($this->compileQuery());
         if (!$statement) {
-            $error = static::$db->errorInfo();
+            $error = static::driver()->errorInfo();
             static::$lastError = new QueryException($error[2], $error[0], $error[1]);
             throw static::$lastError;
         }
@@ -145,7 +137,7 @@ class Query {
      */
     public function exe(string $sql)
     {
-        if (!isset(static::$db)) {
+        if (!static::driver()) {
             throw new \RuntimeException('No PDO driver available.');
         }
 
@@ -252,13 +244,13 @@ class Query {
     private function prepareStatement(string $sql): \PDOStatement
     {
         try {
-            $stmt = static::$db->prepare($sql);
+            $stmt = static::driver()->prepare($sql);
         } catch (\PDOException $e) {
             throw $e;
         }
 
         if (!$stmt) {
-            $error = static::$db->errorInfo();
+            $error = static::driver()->errorInfo();
             static::$lastError = new QueryException($error[2], $error[0], $error[1]);
             throw static::$lastError;
         }
@@ -283,7 +275,7 @@ class Query {
         $this->type = 'SELECT';
         $statement = $this->exe($this->compileQuery());
         if (!$statement) {
-            $error = static::$db->errorInfo();
+            $error = static::driver()->errorInfo();
             static::$lastError = new QueryException($error[2], $error[0], $error[1]);
             throw static::$lastError;
         }
@@ -299,7 +291,7 @@ class Query {
         $this->type = 'SELECT';
         $statement = $this->exe($this->compileQuery());
         if (!$statement) {
-            $error = static::$db->errorInfo();
+            $error = static::driver()->errorInfo();
             static::$lastError = new QueryException($error[2], $error[0], $error[1]);
             throw static::$lastError;
         }
@@ -382,7 +374,7 @@ class Query {
 
     public static function insertId()
     {
-        return static::$db->lastInsertId();
+        return static::driver()->lastInsertId();
     }
 
     /**

@@ -4,17 +4,16 @@ namespace Tests\Feature;
 
 use PhpCli\Database\Query;
 use PhpCli\Database\PaginatedQuery;
+use PhpCli\Facades\DB;
 use Tests\TestCase;
 
 final class DatabaseTest extends TestCase
 {
     use \Tests\UsesDatabase;
 
-    public $db;
-
     public function setUp(): void
     {
-        $this->db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
         $this->db->exec('CREATE TABLE IF NOT EXISTS test (
             id INTEGER PRIMARY KEY,
@@ -28,7 +27,7 @@ final class DatabaseTest extends TestCase
 
     public function testQuery()
     {
-        $result = Query::table('test')->insert(['name' => 'First', 'color' => 'red', 'size' => 1]);
+        $result = DB::table('test')->insert(['name' => 'First', 'color' => 'red', 'size' => 1]);
 
         $result = Query::table('test')->insert([
             ['name' => 'Second', 'color' => null, 'size' => 2],
@@ -45,7 +44,7 @@ final class DatabaseTest extends TestCase
 
         $this->assertTrue($result);
 
-        $row = Query::table('test')
+        $row = DB::table('test')
             ->where('name', 'Second')
             ->first();
 

@@ -232,7 +232,7 @@ trait Where
         $conjunction = $where[0];
 
         if (is_object($where[1]) && !($where[1] instanceof \stdClass) && ($where[1] instanceof \Closure)) {
-            $query = new Query(Query::driver(), $this->getParent());
+            $query = new Query($this->getParent());
             $where[1]($query);
             $sql = $query->compileWhere(true);
             

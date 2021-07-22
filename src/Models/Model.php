@@ -41,9 +41,8 @@ class Model implements \JsonSerializable, \Serializable
 
     /**
      * @param array|object $attributes
-     * @param \PDO|null $db
      */
-    public function __construct($attributes = [], \PDO $db = null)
+    public function __construct($attributes = [])
     {
         if (is_object($attributes)) {
             $attributes = get_object_vars($attributes);
@@ -53,9 +52,6 @@ class Model implements \JsonSerializable, \Serializable
         }
 
         $this->setAttributes($attributes);
-        if ($db) {
-            Query::setDriver($db);
-        }
     }
 
     public static function create(array $attributes = []): Model

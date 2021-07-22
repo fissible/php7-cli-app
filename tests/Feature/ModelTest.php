@@ -14,9 +14,9 @@ final class ModelTest extends TestCase
 
     public function testFind()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL
         )');
@@ -29,9 +29,9 @@ final class ModelTest extends TestCase
 
     public function testWhere()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             color VARCHAR (10) DEFAULT NULL,
@@ -55,9 +55,7 @@ final class ModelTest extends TestCase
 
     public function testGetAttribute()
     {
-        $Model = new Model([
-            'name' => 'TestModel'
-        ]);
+        $Model = new Model(['name' => 'TestModel']);
 
         $this->assertEquals('TestModel', $Model->getAttribute('name'));
     }
@@ -82,15 +80,15 @@ final class ModelTest extends TestCase
 
     public function testDelete()
     {
-        $db = $this->setUpDatabase();
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->setUpDatabase();
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL
         )');
 
         $Model = new Model([
             'name' => 'ModelDelete'
-        ], $db);
+        ]);
 
         $result = Query::table('model')->insert(['name' => 'ModelDelete']);
         $Model->setAttribute('id', (int) $result);
@@ -100,14 +98,14 @@ final class ModelTest extends TestCase
 
     public function testExists()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL
         )');
 
-        $Model = new Model([], $db);
+        $Model = new Model();
 
         $this->assertFalse($Model->exists());
 
@@ -140,16 +138,14 @@ final class ModelTest extends TestCase
 
     public function testCreate()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
             updated_at TIMESTAMP
         )');
-
-        Query::setDriver($db);
 
         $Model = Model::create(['name' => 'HasName']);
 
@@ -161,16 +157,16 @@ final class ModelTest extends TestCase
 
     public function testInsert()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
             updated_at TIMESTAMP
         )');
 
-        $Model = new Model(['name' => 'HasName'], $db);
+        $Model = new Model(['name' => 'HasName']);
 
         $this->assertFalse($Model->exists());
         $this->assertTrue($Model->insert());
@@ -193,16 +189,16 @@ final class ModelTest extends TestCase
 
     public function testRefresh()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
             updated_at TIMESTAMP
         )');
 
-        $Model = new Model(['name' => 'HasAnotherName'], $db);
+        $Model = new Model(['name' => 'HasAnotherName']);
         $Model->save();
 
         $this->assertTrue($Model->exists());
@@ -219,16 +215,16 @@ final class ModelTest extends TestCase
 
     public function testSave()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
             updated_at TIMESTAMP
         )');
 
-        $Model = new Model(['name' => 'HasAnotherName'], $db);
+        $Model = new Model(['name' => 'HasAnotherName']);
         
         $this->assertFalse($Model->exists());
 
@@ -246,16 +242,16 @@ final class ModelTest extends TestCase
 
     public function testUpdate()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS model (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS model (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             created_at TIMESTAMP DEFAULT (strftime(\'%s\',\'now\')),
             updated_at TIMESTAMP
         )');
 
-        // $Model = new Model(['name' => 'HasAnotherName'], $db);
+        // $Model = new Model(['name' => 'HasAnotherName']);
         $id = intval(Query::table('model')->insert(['name' => 'ModelUpdate']));
         $Model = Model::find($id);
 
@@ -270,9 +266,9 @@ final class ModelTest extends TestCase
 
     public function testFloatParam()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS test_table (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS test_table (
             id INTEGER PRIMARY KEY,
             settlement DATE NOT NULL,
             quantity INTEGER NOT NULL,
@@ -307,9 +303,9 @@ final class ModelTest extends TestCase
 
     public function testPaginatedQuery()
     {
-        $db = $this->setUpDatabase();
+        $this->setUpDatabase();
 
-        $db->exec('CREATE TABLE IF NOT EXISTS test_table (
+        $this->db->exec('CREATE TABLE IF NOT EXISTS test_table (
             id INTEGER PRIMARY KEY,
             name VARCHAR (30) NOT NULL,
             color VARCHAR (10),

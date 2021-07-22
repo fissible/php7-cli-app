@@ -29,6 +29,10 @@ class Application
 {
     use RequiresBinary;
 
+    /**
+     * Relative to executable; `pwd`/$configFile.
+     * eg. 'config.json'
+     */
     public static string $configFile;
 
     public Parameters $Parameters;
@@ -175,9 +179,11 @@ class Application
         $created = false;
         if (!isset(static::$db)) {
             static::$db = DatabaseDriver::create($this->config()->get('database'));
-            Query::setDriver(static::$db);
             $created = true;
         }
+
+        $this->bindInstance(DatabaseDriver::class, static::$db);
+        Query::app($this);
 
         return $created;
     }
@@ -217,14 +223,13 @@ class Application
      */
     protected function init(): void
     {
-        if ($this->hasDatabaseConfig() && $this->databaseInit()) {
-            $this->createTables();
-        }
-
         // Set up services
         if ($this->hasDatabaseConfig()) {
-            $config = $this->config()->get('database');
-            $this->bindInstance(DatabaseDriver::class, DatabaseDriver::create($config));
+            $created = $this->databaseInit();
+            
+            if ($created) {
+                $this->createTables();
+            }
         }
         if ($this->hasLoggerConfig()) {
             $config = $this->config()->get('logger');
@@ -232,7 +237,7 @@ class Application
                 return Logger::create($config);
             });
 
-            Log::$app = $this;
+            Log::app($this);
         }
     }
 
@@ -250,20 +255,6 @@ class Application
         return $this;
     }
 
-    public function config(): Config
-    {
-        $path = $this->getConfigFilepath();
-        if (!isset($this->Config) && $path) {
-            $this->Config = new Config($path);
-        }
-
-        if (isset($this->Config)) {
-            return $this->Config;
-        }
-
-        throw new ConfigNotFoundException($path ?? '<no path supplied>');
-    }
-
     /**
      * @param string $class
      * @param mixed $instance
@@ -276,6 +267,20 @@ class Application
         }
 
         $this->instances[$class] = $instance;
+    }
+
+    public function config(): Config
+    {
+        $path = $this->getConfigFilepath();
+        if (!isset($this->Config) && $path) {
+            $this->Config = new Config($path);
+        }
+
+        if (isset($this->Config)) {
+            return $this->Config;
+        }
+
+        throw new ConfigNotFoundException($path ?? '<no path supplied>');
     }
 
     /**
