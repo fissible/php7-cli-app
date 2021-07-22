@@ -2,12 +2,16 @@
 
 namespace PhpCli;
 
+use PhpCli\Database\Driver as DatabaseDriver;
 use PhpCli\Database\Query;
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
-use PhpCli\Filesystem\File;
-use PhpCli\Traits\RequiresBinary;
 use PhpCli\Exceptions\ConfigNotFoundException;
+use PhpCli\Exceptions\ValidationException;
+use PhpCli\Filesystem\File;
+use PhpCli\Reporting\Logger;
+use PhpCli\Traits\RequiresBinary;
+use PhpCli\Validation\Validator;
 
 /**
  * Application class
@@ -42,6 +46,10 @@ class Application
     protected Config $Config;
 
     protected string $defaultPrompt = ' > ';
+
+    protected array $instances;
+
+    protected array $providers;
 
     protected string $script;
 
@@ -141,7 +149,10 @@ class Application
     }
 
     /**
-     * Execute the sql statements to create new tables.
+     * Execute the sql statements to create new tables. Overwrite in extending classes
+     * and merge the argument "$statements" to preserve parent SQL statements, eg.
+     * 
+     *     parent::createTables(array_merge($statements, ['SQL string']));
      * 
      * @param array
      */
@@ -161,46 +172,44 @@ class Application
      */
     protected function databaseInit(): bool
     {
-        if (isset(static::$db)) {
-            return true;
+        $created = false;
+        if (!isset(static::$db)) {
+            static::$db = DatabaseDriver::create($this->config()->get('database'));
+            Query::setDriver(static::$db);
+            $created = true;
         }
 
-        $exists = false;
+        return $created;
+    }
 
-        if ($path = $this->getConfigFilepath()) {
-            $this->Config = new Config($path);
-            $driver = $this->Config->get('database.driver');
-
-            switch ($driver) {
-                case 'sqlite':
-                    if ($path = $this->Config->get('database.path')) {
-                        $DbFile = new File($path);
-                        $info = $DbFile->info();
-                        
-                        if ($info['dirname'] === '.') {
-                            $DbFile = new File(rtrim($path, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'database.sqlite3');
-                        } elseif (!isset($info['extension'])) {
-                            $DbFile = new File($path.'.sqlite');
-                        }
-
-                        $exists = $DbFile->exists();
-                        static::$db = new \PDO(sprintf('sqlite:%s', $DbFile->getPath()), '', '', array(
-                            \PDO::ATTR_EMULATE_PREPARES => false,
-                            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC
-                        ));
-                    } else {
-                        throw new \InvalidArgumentException('Database configuration path ("database.path") not set.');
-                    }
-                break;
-            }
-
-            if (isset(static::$db)) {
-                Query::setDriver(static::$db);
-            }
+    /**
+     * Check if there is a config file and it contains database config fields.
+     * 
+     * @return bool
+     */
+    protected function hasDatabaseConfig(): bool
+    {
+        if (!$this->getConfigFilepath()) {
+            return false;
         }
+        $config = $this->config()->get('database');
 
-        return $exists;
+        return !empty($config);
+    }
+
+    /**
+     * Check if there is a config file and it contains database config fields.
+     * 
+     * @return bool
+     */
+    protected function hasLoggerConfig(): bool
+    {
+        if (!$this->getConfigFilepath()) {
+            return false;
+        }
+        $config = $this->config()->get('logger');
+
+        return !empty($config);
     }
 
     /**
@@ -208,21 +217,107 @@ class Application
      */
     protected function init(): void
     {
-        if (!$this->databaseInit()) {
+        if ($this->hasDatabaseConfig() && $this->databaseInit()) {
             $this->createTables();
+        }
+
+        // Set up services
+        if ($this->hasDatabaseConfig()) {
+            $config = $this->config()->get('database');
+            $this->bindInstance(DatabaseDriver::class, DatabaseDriver::create($config));
+        }
+        if ($this->hasLoggerConfig()) {
+            $config = $this->config()->get('logger');
+            $this->defineProvider(Logger::class, function ($app) {
+                return Logger::create($config);
+            });
+
+            Log::$app = $this;
         }
     }
 
-    public function bind(string $name, $action)
+    /**
+     * Bind a route name with a callable or Command instance.
+     * 
+     * @param string $name
+     * @param callable|Command $action
+     * @return self
+     */
+    public function bind(string $name, $action): self
     {
         $this->Router->bind(new Route($name, $action));
+
+        return $this;
     }
 
-    public function config(): ?Config
+    public function config(): Config
     {
+        $path = $this->getConfigFilepath();
+        if (!isset($this->Config) && $path) {
+            $this->Config = new Config($path);
+        }
+
         if (isset($this->Config)) {
             return $this->Config;
         }
+
+        throw new ConfigNotFoundException($path ?? '<no path supplied>');
+    }
+
+    /**
+     * @param string $class
+     * @param mixed $instance
+     * @return void
+     */
+    public function bindInstance(string $class, $instance): void
+    {
+        if (!isset($this->instances)) {
+            $this->instances = [];
+        }
+
+        $this->instances[$class] = $instance;
+    }
+
+    /**
+     * @param string $class
+     * @param mixed $provider
+     * @return void
+     */
+    public function defineProvider(string $class, $provider): void
+    {
+        if (!is_callable($provider)/* && !($provider instanceof Prrovider)*/) {
+            throw new InvalidArgumentException();
+        }
+
+        if (!isset($this->providers)) {
+            $this->providers = [];
+        }
+
+        $this->providers[$class] = $provider;
+    }
+
+    public function instance(string $class)
+    {
+        if (isset($this->instances) && isset($this->instances[$class])) {
+            return $this->instances[$class];
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve an instance of class.
+     */
+    public function make(string $class)
+    {
+        if (isset($this->providers) && isset($this->providers[$class])) {
+            // create new instance
+            if (is_callable($this->providers[$class])) {
+                return $this->providers[$class]($this);
+            }
+            // return $this->providers[$class]->make($this);
+        }
+
         return null;
     }
 
@@ -704,18 +799,43 @@ class Application
     /**
      * @param string|null $prompt
      * @param mixed $default
-     * @param bool $required
+     * @param array $rules
+     * @param array $messages
      * @return mixed
      */
-    public function prompt(?string $prompt = null, $default = null, $required = false)
+    public function prompt(?string $prompt = null, $default = null, array $rules = [], array $messages = [])
     {
         if (is_null($prompt)) {
             $prompt = $this->defaultPrompt;
         }
 
         $prompt = Input::prepare_prompt($prompt, $default);
+        $validator = empty($rules) ? null : Input::validator($rules, $messages);
 
-        return $this->input = Input::prompt($prompt, $default, $required);
+        return $this->input = Input::prompt($prompt, $default, $validator);
+    }
+
+    public function promptDate(?string $prompt = null, string $format = 'mm/dd/yyyy', ?string $default = null, array $rules = [], array $messages = []): ?\DateTime
+    {
+        if (is_null($prompt)) {
+            $prompt = 'Enter date (#format): ';
+        }
+
+        if (false !== strpos($prompt, '#format')) {
+            $prompt = str_replace('#format', $format, $prompt);
+        }
+
+        $rules[] = 'date:'.$format;
+
+        if ($default) {
+            $default = (new \DateTime($default))->format($format);
+        }
+
+        if ($input = $this->prompt($prompt, $default, $rules, $messages)) {
+            return \DateTime::createFromFormat($format, $input);
+        }
+
+        return $default;
     }
 
     /**

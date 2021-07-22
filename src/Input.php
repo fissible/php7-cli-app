@@ -2,6 +2,7 @@
 
 namespace PhpCli;
 
+use PhpCli\Validation\Validator;
 use Seld\CliPrompt\CliPrompt;
 
 class Input
@@ -44,7 +45,7 @@ class Input
         return $prompt;
     }
 
-    public static function prompt($prompt, $default = null, $required = false)
+    public static function prompt($prompt, $default = null, Validator $validator = null)
     {
         $answer = static::readline($prompt);
 
@@ -52,8 +53,10 @@ class Input
             $answer = $default;
         }
 
-        while (empty($answer) && $required) {
-            $answer = static::readline($prompt);
+        if (!is_null($validator)) {
+            while ($validator->fails(['input' => $answer])) {
+                $answer = static::readline($prompt);
+            }
         }
 
         return $answer;
@@ -63,6 +66,24 @@ class Input
     {
         fwrite(STDOUT, $prompt);
         return CliPrompt::hiddenPrompt();
+    }
+
+    /**
+     * Return a Validator with keyed rules.
+     * eg. Input::validator(['required', 'date:Y-m-d'], ['required' => 'Date is required.'])
+     */
+    public static function validator(iterable $rules = [], iterable $messages = [])
+    {
+        if (!empty($messages)) {
+            $messages = array_flip(array_map(function ($ruleName) {
+                if (false === strpos($ruleName, 'input')) {
+                    $ruleName = 'input.'.$ruleName;
+                }
+                return $ruleName;
+            }, array_flip($messages)));
+        }
+
+        return new Validator(['input' => $rules], $messages);
     }
 
     public static function yesNo($prompt, $default = 'y'): bool
