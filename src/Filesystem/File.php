@@ -47,7 +47,25 @@ class File {
 
     public function delete(): bool
     {
+        if ($this->isDir()) {
+            if (!$this->empty()) {
+                throw new \Exception(sprintf('Directory "%s" not empty.', $this->path));
+            }
+            return rmdir($this->path);
+        }
         return unlink($this->path);
+    }
+
+    public function empty(): bool
+    {
+        if (!$this->exists()) {
+            throw new FileNotFoundException($this->path);
+        }
+
+        if ($this->isDir()) {
+            return count($this->files()) == 0;
+        }
+        return count($this->read(true)) == 0;
     }
 
     public function exists(): bool
