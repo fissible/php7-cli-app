@@ -8,6 +8,6 @@ if (version_compare(phpversion(), '7.4.0', '<')) {
 // The installation script replaces the path in the following require_once on copy
 require_once('~/scripts/cli/vendor/autoload.php');
 
-$app = new PhpCli\Hatchery(basename(__FILE__));
+$app = new PhpCli\Hatchery();
 $app->do('hatch');
 $app->exit();

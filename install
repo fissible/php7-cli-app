@@ -55,5 +55,5 @@ $app->bind('install', function () use ($app) {
         $app->linef('New binary written to %s', $saveTo);
         $File->chmod(0755);
     }
-})->do('install');
+})->route('install');
 $app->exit();
