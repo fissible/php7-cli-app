@@ -145,6 +145,10 @@ class Application
         system('tput smcup');
     }
 
+    /**
+     * Used for readline_completion_function()
+     * @todo deprecate
+     */
     protected function completionCallback($input, $index): array
     {
         return $this->Router->getRoutes()->map(function (Route $Route) {
@@ -667,7 +671,7 @@ class Application
     }
 
     /**
-     * Generate a Table to be used as a route index.
+     * Generate a Table to be used as an index.
      * 
      * @param Collection $Items
      * @param array $columns
@@ -874,7 +878,7 @@ class Application
      */
     public function promptYesNo(string $prompt, ?bool $default = false): ?bool
     {
-        $response = $this->prompt($prompt, $default ? 'y' : 'n', true);
+        $response = $this->prompt($prompt, $default ? 'y' : 'n', ['required']);
         
         if (is_string($response)) {
             return strtolower(substr($response, 0, 1)) === 'y';

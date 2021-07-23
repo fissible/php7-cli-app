@@ -119,7 +119,7 @@ class Output
         return system('tput el');
     }
 
-    public static function color($input, $color, $background_color = false)
+    public static function color($input, $color, $background_color = false): string
     {
         $out = "";
 
