@@ -55,6 +55,10 @@ class Input
 
         if (!is_null($validator)) {
             while ($validator->fails(['input' => $answer])) {
+                // if validator does not have required return null
+                if (!$validator->hasRule('required')) {
+                    return null;
+                }
                 $answer = static::readline($prompt);
             }
         }

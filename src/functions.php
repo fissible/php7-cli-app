@@ -135,7 +135,7 @@ function deprecated($class = null, $function = null, $line = null)
     if (is_null($line)) {
         $line = $caller['line'];
     }
-    if (IS_CLI) {
+    if (php_sapi_name() === 'cli') {
         printl(sprintf('DEPRECATED - %s %s[%d]', $function, $class, $line));
     }
 }
@@ -257,7 +257,7 @@ function handle_result($result = null)
     }
 
     if (is_array($result)) {
-        if (IS_CLI && ! $coerce_string) {
+        if (php_sapi_name() === 'cli' && ! $coerce_string) {
             if (! empty($result)) {
                 print json_encode($result, JSON_PRETTY_PRINT);
             }
