@@ -3,8 +3,6 @@
 namespace PhpCli\Config;
 
 use PhpCli\Arr;
-use PhpCli\Exceptions\ConfigNotFoundException;
-use PhpCli\Filesystem\File;
 use PhpCli\Interfaces\Config;
 
 /**
@@ -55,7 +53,7 @@ class Memory implements Config
             // return $data;
 
             return array_reduce(explode('.', $name), function ($previous, $current) {
-                return is_numeric($current) ? ($previous[$current] ?? null) : ($previous->$current ?? null);
+                return is_numeric($current) && !is_object($previous) ? ($previous[$current] ?? null) : ($previous->$current ?? null);
             }, $this->data);
         } elseif (isset($this->data->$name)) {
             return $this->data->$name;
@@ -99,7 +97,7 @@ class Memory implements Config
             // }
 
             $data = array_reduce(explode('.', $name), function ($previous, $current) {
-                return is_numeric($current) ? ($previous[$current] ?? null) : ($previous->$current ?? null);
+                return is_numeric($current) && !is_object($previous) ? ($previous[$current] ?? null) : ($previous->$current ?? null);
             }, $this->data);
 
             return !is_null($data);

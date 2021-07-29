@@ -2,16 +2,19 @@
 
 namespace PhpCli;
 
+use PhpCli\Config\Json;
 use PhpCli\Database\Driver as DatabaseDriver;
 use PhpCli\Database\Query;
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
 use PhpCli\Exceptions\ConfigNotFoundException;
-use PhpCli\Exceptions\ValidationException;
+use PhpCli\Exceptions\MissingArgumentException;
+use PhpCli\Facades\Log;
 use PhpCli\Filesystem\File;
+use PhpCli\Interfaces\Config;
 use PhpCli\Reporting\Logger;
+use PhpCli\Traits\HasConfig;
 use PhpCli\Traits\RequiresBinary;
-use PhpCli\Validation\Validator;
 
 /**
  * Application class
@@ -27,7 +30,7 @@ use PhpCli\Validation\Validator;
  */
 class Application
 {
-    use RequiresBinary;
+    use RequiresBinary, HasConfig;
 
     /**
      * Relative to executable; `pwd`/$configFile.
@@ -46,8 +49,6 @@ class Application
     protected static \PDO $db;
 
     protected Command $defaultCommand;
-
-    protected Config $Config;
 
     protected string $defaultPrompt = ' > ';
 
@@ -199,7 +200,7 @@ class Application
      */
     protected function hasDatabaseConfig(): bool
     {
-        if (!$this->getConfigFilepath()) {
+        if (!$this->isConfigured()) {
             return false;
         }
         $config = $this->config()->get('database');
@@ -214,7 +215,7 @@ class Application
      */
     protected function hasLoggerConfig(): bool
     {
-        if (!$this->getConfigFilepath()) {
+        if (!$this->isConfigured()) {
             return false;
         }
         $config = $this->config()->get('logger');
@@ -227,6 +228,17 @@ class Application
      */
     protected function init(): void
     {
+        if (!$this->isConfigured() && $path = $this->getConfigFilepath()) {
+            switch ((new File($path))->extension) {
+                case 'json':
+                    $this->setConfig(new Json($path));
+                    break;
+                default:
+                    $this->setConfig(include($path));
+                    break;
+            }
+        }
+
         // Set up services
         if ($this->hasDatabaseConfig()) {
             $created = $this->databaseInit();
@@ -237,7 +249,7 @@ class Application
         }
         if ($this->hasLoggerConfig()) {
             $config = $this->config()->get('logger');
-            $this->defineProvider(Logger::class, function ($app) {
+            $this->defineProvider(Logger::class, function ($app) use ($config) {
                 return Logger::create($config);
             });
 
@@ -273,20 +285,6 @@ class Application
         $this->instances[$class] = $instance;
     }
 
-    public function config(): Config
-    {
-        $path = $this->getConfigFilepath();
-        if (!isset($this->Config) && $path) {
-            $this->Config = new Config($path);
-        }
-
-        if (isset($this->Config)) {
-            return $this->Config;
-        }
-
-        throw new ConfigNotFoundException($path ?? '<no path supplied>');
-    }
-
     /**
      * @param string $class
      * @param mixed $provider
@@ -295,7 +293,7 @@ class Application
     public function defineProvider(string $class, $provider): void
     {
         if (!is_callable($provider)/* && !($provider instanceof Prrovider)*/) {
-            throw new InvalidArgumentException();
+            throw new \InvalidArgumentException();
         }
 
         if (!isset($this->providers)) {
@@ -355,7 +353,14 @@ class Application
      */
     public function run($command = null)
     {
-        $this->checkMissingParameters();
+        try {
+            $this->checkMissingParameters();
+        } catch (MissingArgumentException $e) {
+            $this->error($e->getMessage());
+            $this->doHelp();
+            $this->exit();
+        }
+        
 
         $defaultCommand = $command;
 
@@ -426,6 +431,11 @@ class Application
         }
         
         return $return;
+    }
+
+    public function path()
+    {
+        return get_included_files()[0];
     }
 
     protected function handle(Event $Event)
@@ -1003,12 +1013,12 @@ class Application
         if (isset(static::$configFile)) {
             $file = static::$configFile;
             if (!file_exists($file)) {
-                $file = __DIR__.DIRECTORY_SEPARATOR.$file;
+                $file = dirname($this->path()).DIRECTORY_SEPARATOR.$file;
             }
             if (file_exists($file)) {
                 return $file;
             }
-            throw new ConfigNotFoundException(static::$configFile);
+            throw new ConfigNotFoundException($file);
         }
         return null;
     }

@@ -139,6 +139,11 @@ class Json extends File implements Config
         return $this;
     }
 
+    public function find(Pointer $Pointer)
+    {
+        return $this->getPointerValue($Pointer, $this->data);
+    }
+
     public function setData(\stdClass $data): self
     {
         $this->data = $data;
