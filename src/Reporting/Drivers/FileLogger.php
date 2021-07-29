@@ -7,13 +7,11 @@ use PhpCli\Reporting\Logger;
 
 class FileLogger extends Logger {
 
-    public Output $output;
-
     public static string $fileExtension = 'log';
 
-    public function __construct(array $config)
+    public function __construct($Config)
     {
-        parent::__construct($config);
+        parent::__construct($Config);
 
         $this->requireConfigKey('path');
     }
@@ -33,9 +31,9 @@ class FileLogger extends Logger {
         $File->write($entry, true);
     }
 
-    public static function create(array $config): Logger
+    public static function create($Config): Logger
     {
-        return new FileLogger($config);
+        return new static($Config);
     }
 
     /**

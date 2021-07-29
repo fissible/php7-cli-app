@@ -15,7 +15,8 @@ final class ValidatorTest extends TestCase
     {
         $this->v = new Validator([
             'name' => ['required', 'regex:/B{1}o{1}b{1}/'],
-            'date' => ['date:Y-m-d']
+            'date' => ['date'],
+            'datetime' => ['date-time']
         ], [
             'name.required' => 'Name is required'
         ]);
@@ -50,6 +51,11 @@ final class ValidatorTest extends TestCase
         $this->assertTrue($this->v->passes([
             'name' => 'Bob',
             'date' => '2012-01-10'
+        ]));
+        $this->assertTrue($this->v->passes([
+            'name' => 'Bob',
+            'date' => '2012-01-10',
+            'datetime' => '2018-03-20T09:12:28Z'
         ]));
         $this->assertFalse($this->v->passes([
             'name' => 'Rob',

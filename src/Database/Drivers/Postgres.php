@@ -9,17 +9,17 @@ class Postgres extends Driver {
 
     protected int $port = 5432;
 
-    public static function create(array $config): \PDO
+    public static function create($Config): \PDO
     {
-        $driver = new Postgres($config);
+        $driver = new Postgres($Config);
         $driver->requireConfigKey('host|hostaddr');
-        $username = $config['user'] ?? $config['username'] ?? null;
-        $password = $config['password'] ?? null;
+        $username = $driver->Config->user ?? $driver->Config->username ?? null;
+        $password = $driver->Config->password ?? null;
         $dsn = static::makeDsn([
-            'host' => $config['host'] ?? null,
-            'hostaddr' => $config['hostaddr'] ?? null,
-            'port' => $config['port'] ?? $driver->port,
-            'dbname' => $config['name'] ?? $username ?? null,
+            'host' => $driver->Config->host ?? null,
+            'hostaddr' => $driver->Config->hostaddr ?? null,
+            'port' => $driver->Config->port ?? $driver->port,
+            'dbname' => $driver->Config->name ?? $username ?? null,
             // 'user' => $username,
             // 'password' => $password
         ]);

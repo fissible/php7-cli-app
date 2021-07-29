@@ -9,20 +9,20 @@ class Mysql extends Driver {
 
     protected int $port = 3306;
 
-    public static function create(array $config): \PDO
+    public static function create($Config): \PDO
     {
-        $driver = new Mysql($config);
+        $driver = new Mysql($Config);
         $driver->requireConfigKey('host|socket');
         $driver->requireConfigKey('user|username');
-        $username = $config['user'] ?? $config['username'] ?? null;
-        $password = $config['password'] ?? null;
+        $username = $driver->Config->user ?? $driver->Config->username ?? null;
+        $password = $driver->Config->password ?? null;
         $dsn = static::makeDsn([
-            'host' => $config['host'] ?? null,
-            'unix_socket' => $config['socket'] ?? null,
-            'port' => $config['port'] ?? $driver->port,
-            'dbname' => $config['name'] ?? null,
+            'host' => $driver->Config->host ?? null,
+            'unix_socket' => $driver->Config->socket ?? null,
+            'port' => $driver->Config->port ?? $driver->port,
+            'dbname' => $driver->Config->name ?? null,
             'password' => $password,
-            'charset' => $config['charset'] ?? null
+            'charset' => $driver->Config->charset ?? null
         ]);
 
         return new \PDO('mysql: '.$dsn, $username, $password, [

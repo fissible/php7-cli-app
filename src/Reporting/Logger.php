@@ -30,9 +30,9 @@ class Logger {
 
     public static string $prefixJoin = ' - ';
 
-    public function __construct(array $config)
+    public function __construct($Config)
     {
-        $this->setConfig($config);
+        $this->setConfig($Config);
     }
 
     public function env(): ?string
@@ -65,18 +65,18 @@ class Logger {
         return null;
     }
 
-    public static function create(array $config): Logger
+    public static function create($Config): Logger
     {
-        $driver = new Logger($config);
+        $driver = new Logger($Config);
 
         switch ($driver->Config->driver) {
             case 'file':
-                return FileLogger::create($config);
+                return FileLogger::create($Config);
                 break;
             case 'stdout':
             case 'standard':
             default:
-                return StandardLogger::create($config);
+                return StandardLogger::create($Config);
                 break;
         }
 

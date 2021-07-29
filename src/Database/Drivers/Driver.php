@@ -11,46 +11,46 @@ class Driver
 
     protected int $port = 0;
 
-    public function __construct(array $config)
+    public function __construct($Config)
     {
-        $this->setConfig($config);
+        $this->setConfig($Config);
     }
 
     /**
-     * @param array $config
+     * @param mixed $Config
      * @return Driver
      */
-    public static function create(array $config): \PDO
+    public static function create($Config): \PDO
     {
-        $driver = new Driver($config);
+        $driver = new Driver($Config);
         $driver->requireConfigKey('driver');
 
         switch ($driver->Config->driver) {
             case 'mysql':
-                return Mysql::create($config);
+                return Mysql::create($Config);
             break;
             case 'pgsql':
             case 'postgres':
-                return Postgres::create($config);
+                return Postgres::create($Config);
             break;
             case 'sqlite':
             case 'sqlite3':
-                return Sqlite::create($config);
+                return Sqlite::create($Config);
             break;
             case 'sqlsrv':
-                return MsSqlServer::create($config);
+                return MsSqlServer::create($Config);
             break;
         }
 
-        $username = $config['user'] ?? $config['username'] ?? null;
-        $password = $config['password'] ?? null;
+        $username = $driver->Config->user ?? $driver->Config->username ?? null;
+        $password = $driver->Config->password ?? null;
         $dsn = static::makeDsn([
-            'host'     => $config['host'] ?? null,
-            'port'     => $config['port'] ?? $driver->port,
-            'Server'   => $config['Server'] ?? null,
-            'Database' => $config['Database'] ?? null,
-            'user'     => $config['user'] ?? null,
-            'username' => $config['username'] ?? null,
+            'host'     => $driver->Config->host ?? null,
+            'port'     => $driver->Config->port ?? $driver->port,
+            'Server'   => $driver->Config->Server ?? null,
+            'Database' => $driver->Config->Database ?? null,
+            'user'     => $driver->Config->user ?? null,
+            'username' => $driver->Config->username ?? null,
             'password' => $password
         ]);
 

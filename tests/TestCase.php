@@ -26,4 +26,17 @@ class TestCase extends BaseClass
 
         return ob_get_clean();
     }
+
+    protected static function invoke($obj, $name, array $args = [])
+    {
+        $class = new \ReflectionClass($obj);
+        $method = $class->getMethod($name);
+        $method->setAccessible(true);
+
+        if (is_string($obj)) {
+            $obj = new $obj;
+        }
+
+        return $method->invokeArgs($obj, $args);
+    }
 }

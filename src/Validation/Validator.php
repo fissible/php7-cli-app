@@ -151,6 +151,7 @@ class Validator
      */
     public function setRules(iterable $rules): self
     {
+
         $this->rules = $this->normalizeRules($rules);
 
         return $this;
@@ -220,13 +221,15 @@ class Validator
      */
     protected function getValidatedRule($rule): Rule
     {
+
         if ($rule instanceof Rule) {
             return $rule;
         }
 
-        if (is_callable($rule)) {
+        if (!is_string($rule) && is_callable($rule)) {
             return new Rule('custom', $rule);
         }
+
 
         if (!is_string($rule)) {
             throw new InvalidArgumentException('Invalid rule.');
@@ -240,10 +243,21 @@ class Validator
             $params = [];
         }
 
-        $className = '\\PhpCli\\Validation\\'.ucfirst(strtolower($ruleName)).'Rule';
+
+        $params = array_filter($params);
+
+
+        $ruleNameParts = explode('-', $ruleName);
+        $ruleNameParts = array_map(function ($part) {
+            return ucfirst(strtolower($part));
+        }, $ruleNameParts);
+
+
+        $className = '\\PhpCli\\Validation\\'.implode($ruleNameParts).'Rule';
+
 
         if (!class_exists($className)) {
-            throw new InvalidArgumentException('Invalid rule "'.$rule.'"');
+            throw new \InvalidArgumentException('Invalid rule "'.$rule.'"');
         }
 
         return new $className(...$params);

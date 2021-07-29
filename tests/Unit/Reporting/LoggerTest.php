@@ -13,7 +13,7 @@ class LoggerTest extends TestCase
 {
     public function testEnv()
     {
-        $Logger = new Logger([
+        $Logger = new Logger((object) [
             'env' => 'production'
         ]);
 
@@ -22,7 +22,7 @@ class LoggerTest extends TestCase
 
     public function testLog()
     {
-        $Logger = new Logger([]);
+        $Logger = new Logger(new \stdClass);
         ob_start();
         $Logger->log('There was an error', Logger::ERROR);
         $out = ob_get_clean();
@@ -32,7 +32,7 @@ class LoggerTest extends TestCase
 
     public function testName()
     {
-        $Logger = new Logger([
+        $Logger = new Logger((object) [
             'name' => 'Stdout Logger'
         ]);
 
@@ -41,7 +41,7 @@ class LoggerTest extends TestCase
 
     public function testCreate()
     {
-        $Logger = Logger::create([
+        $Logger = Logger::create((object) [
             'env' => 'production',
             'name' => 'Stdout Logger'
         ]);
@@ -56,7 +56,7 @@ class LoggerTest extends TestCase
         $path = __DIR__.DIRECTORY_SEPARATOR.'logs';
         $app = new Application();
         $app->defineProvider(Logger::class, function ($app) use ($path) {
-            return Logger::create([
+            return Logger::create((object) [
                 'driver' => 'file',
                 'path' => $path
             ]);

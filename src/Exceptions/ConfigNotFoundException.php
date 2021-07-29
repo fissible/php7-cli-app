@@ -9,6 +9,6 @@ class ConfigNotFoundException extends FileNotFoundException
     public function __construct($path, Exception $previous = null)
     {
         $message = sprintf('Config file "%s" not found', $path);
-        parent::__construct($message, 0, $previous);
+        parent::__construct($message, $previous);
     }
 }

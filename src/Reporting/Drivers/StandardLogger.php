@@ -9,9 +9,9 @@ class StandardLogger extends Logger {
 
     public Output $output;
 
-    public function __construct(array $config)
+    public function __construct($Config)
     {
-        parent::__construct($config);
+        parent::__construct($Config);
 
         $this->output = new Output();
     }
@@ -39,8 +39,8 @@ class StandardLogger extends Logger {
         }
     }
 
-    public static function create(array $config): Logger
+    public static function create($Config): Logger
     {
-        return new StandardLogger($config);
+        return new static($Config);
     }
 }

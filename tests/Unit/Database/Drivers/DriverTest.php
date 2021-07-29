@@ -1,9 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Tests\Unit\Database\Grammar;
+namespace Tests\Unit\Database\Drivers;
 
 use PhpCli\Database\Drivers\Driver;
-use PhpCli\Database\Query;
 use Tests\TestCase;
 
 final class DriverTest extends TestCase
@@ -15,7 +14,7 @@ final class DriverTest extends TestCase
         // $this->expectException(\LogicException::class);
         // $this->expectExceptionMessage('JOIN missing required criteria.');
 
-        $PDO = Driver::create([
+        $PDO = Driver::create((object) [
             'driver' => 'sqlite',
             'path' => $this->getDatabaseFile()->getPath()
         ]);

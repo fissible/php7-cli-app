@@ -2,27 +2,25 @@
 
 namespace PhpCli\Validation;
 
-class DateRule extends RegexRule
+class DateTimeRule extends RegexRule
 {
-    protected string $name = 'date';
+    protected string $name = 'date-time';
 
     protected string $format;
 
-    public function __construct(string $format = 'Y-m-d')
+    public function __construct(string $format = 'Y-m-d\TH:i:s\Z')
     {
         parent::__construct($format);
         $this->format = $format;
     }
 
     /**
-     * Convert the format into a regular expression.
-     * 
      * @param string $regex
      * @return self
      */
     public function setRegex(string $regex): self
     {
-        $regex = '/^'.str_replace(['/', '-'], ['\/', '\-'], $regex).'$/';
+        $regex = '/^'.str_replace(['/', '\T', '\Z'], ['\/', 'T', 'Z'], $regex).'$/';
 
         // day
         if (false !== strpos($regex, 'd')) {
@@ -47,6 +45,18 @@ class DateRule extends RegexRule
             $regex = str_replace('y', '(\d{2})', $regex);
         } elseif (false !== strpos($regex, 'Y')) {
             $regex = str_replace('Y', '(\d{4})', $regex);
+        }
+
+        // hour
+        if (false !== strpos($regex, 'H') || false !== strpos($regex, 'h')) {
+            $regex = str_replace(['H', 'h'], '(\d{2})', $regex);
+        } elseif (false !== strpos($regex, 'G') || false !== strpos($regex, 'g')) {
+            $regex = str_replace(['G', 'g'], '(\d{1,2})', $regex);
+        }
+
+        // minutes/seconds
+        if (false !== strpos($regex, 'i') || false !== strpos($regex, 's')) {
+            $regex = str_replace(['i', 's'], '(\d{2})', $regex);
         }
 
         $this->regex = $regex;

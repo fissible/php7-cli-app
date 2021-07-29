@@ -1,0 +1,240 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "eCFR API",
+        "description": "Electronic Code of Federal Regulations API",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "https://ecfr.federalregister.gov",
+            "description": "Main (production) server"
+        }
+    ],
+    "paths": {
+        "/api/search/v1/results": {
+            "get": {
+                "description": "Search results",
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ArrayECFR"
+                                }
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Invalid input"
+                    }
+                }
+            },
+            "parameters": [
+                {
+                    "name": "query",
+                    "in": "(query)",
+                    "description": "Search term; searches the headings and the full text",
+                    "required": false,
+                    "type": "string"
+                },
+                {
+                    "name": "date",
+                    "in": "(query)",
+                    "description": "limit to changes present on this date (YYYY-MM-DD)",
+                    "required": false,
+                    "type": "string"
+                },
+                {
+                    "name": "last_modified_after",
+                    "in": "(query)",
+                    "description": "limit to content last modified after this date (YYYY-MM-DD)",
+                    "required": false,
+                    "type": "string"
+                },
+                {
+                    "name": "last_modified_on_or_after",
+                    "in": "(query)",
+                    "description": "limit to content last modified on or after this date (YYYY-MM-DD)",
+                    "required": false,
+                    "type": "string"
+                },
+                {
+                    "name": "last_modified_before",
+                    "in": "(query)",
+                    "description": "limit to content last modified before this date (YYYY-MM-DD)",
+                    "required": false,
+                    "type": "string"
+                },
+                {
+                    "name": "last_modified_on_or_before",
+                    "in": "(query)",
+                    "description": "limit to content last modified on or before this date (YYYY-MM-DD)",
+                    "required": false,
+                    "type": "string"
+                }
+            ]
+        },
+        "/api/search/v1/count": {
+            "get": {
+                "description": "Search result count",
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success"
+                    },
+                    "405": {
+                        "description": "Invalid input"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ArrayECFR": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/ECFR"
+                }
+            },
+            "ECFR": {
+                "properties": {
+                    "starts_on": {
+                        "type": "string"
+                    },
+                    "ends_on": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "hierarchy": {
+                        "$ref": "#/components/schemas/ECFRhierarchy"
+                    },
+                    "hierarchy_headings": {
+                        "$ref": "#/components/schemas/ECFRhierarchy_headings"
+                    },
+                    "headings": {
+                        "$ref": "#/components/schemas/ECFRheadings"
+                    },
+                    "full_text_excerpt": {
+                        "type": "string"
+                    },
+                    "score": {
+                        "type": "float"
+                    },
+                    "structure_index": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "reserved": {
+                        "type": "boolean"
+                    },
+                    "removed": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ECFRhierarchy": {
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "subtitle": {
+                        "type": "string"
+                    },
+                    "chapter": {
+                        "type": "string"
+                    },
+                    "subchapter": {
+                        "type": "string"
+                    },
+                    "part": {
+                        "type": "string"
+                    },
+                    "subpart": {
+                        "type": "string"
+                    },
+                    "subject_group": {
+                        "type": "string"
+                    },
+                    "section": {
+                        "type": "string"
+                    },
+                    "appendix": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ECFRhierarchy_headings": {
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "subtitle": {
+                        "type": "string"
+                    },
+                    "chapter": {
+                        "type": "string"
+                    },
+                    "subchapter": {
+                        "type": "string"
+                    },
+                    "part": {
+                        "type": "string"
+                    },
+                    "subpart": {
+                        "type": "string"
+                    },
+                    "subject_group": {
+                        "type": "string"
+                    },
+                    "section": {
+                        "type": "string"
+                    },
+                    "appendix": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ECFRheadings": {
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "subtitle": {
+                        "type": "string"
+                    },
+                    "chapter": {
+                        "type": "string"
+                    },
+                    "subchapter": {
+                        "type": "string"
+                    },
+                    "part": {
+                        "type": "string"
+                    },
+                    "subpart": {
+                        "type": "string"
+                    },
+                    "subject_group": {
+                        "type": "string"
+                    },
+                    "section": {
+                        "type": "string"
+                    },
+                    "appendix": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

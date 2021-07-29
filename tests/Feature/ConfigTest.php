@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use PhpCli\Config;
+use PhpCli\Config\Json;
 use Tests\TestCase;
 
 final class ConfigTest extends TestCase
@@ -11,7 +11,7 @@ final class ConfigTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->config = new Config(sprintf('%s/config.json', __DIR__));
+        $this->config = new Json(sprintf('%s/config.json', __DIR__));
     }
 
     public function testSetGet()
@@ -31,6 +31,15 @@ final class ConfigTest extends TestCase
         $this->config->set('car.paint', 'blue');
 
         $this->assertEquals('blue', $this->config->get('car.paint'));
+    }
+
+    public function testGetDataTHroughJsonPointer()
+    {
+        $restConfig = new Json(dirname(__DIR__).'/restConfig.json');
+        $expected = 'eCFR API';
+        $actual = $restConfig->get('services.eCFR.info.title');
+
+        $this->assertEquals($expected, $actual);
     }
 
     protected function tearDown(): void

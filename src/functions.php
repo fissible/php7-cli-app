@@ -140,26 +140,28 @@ function deprecated($class = null, $function = null, $line = null)
     }
 }
 
-function dump($value)
-{
-    $file = __FILE__;
-    $caller = caller(null, 1);
+if (! function_exists('vdump')) {
+    function vdump($value)
+    {
+        $file = __FILE__;
+        $caller = caller(null, 1);
 
-    ob_start();
-    if (is_scalar($value)) {
-        print $value;
-    } else {
-        var_dump($value);
+        ob_start();
+        if (is_scalar($value)) {
+            print $value;
+        } else {
+            var_dump($value);
+        }
+        $out = ob_get_clean();
+
+        // Replace the helpful path/ line no. that prints from var_dump() with caller file and line.
+        $matches = [];
+        if (preg_match('#'. $file . ':(\d+)#', $out, $matches)) {
+            $out = str_replace($matches[0], $caller['file'] . ':' . $caller['line'], $out);
+        }
+
+        fwrite(STDOUT, $out);
     }
-    $out = ob_get_clean();
-
-    // Replace the helpful path/ line no. that prints from var_dump() with caller file and line.
-    $matches = [];
-    if (preg_match('#'. $file . ':(\d+)#', $out, $matches)) {
-        $out = str_replace($matches[0], $caller['file'] . ':' . $caller['line'], $out);
-    }
-
-    fwrite(STDOUT, $out);
 }
 
 function env($key, $default = null)

@@ -7,18 +7,18 @@ use PhpCli\Filesystem\File;
 
 class Sqlite extends Driver {
 
-    public static function create(array $config): \PDO
+    public static function create($Config): \PDO
     {
-        $driver = new Sqlite($config);
+        $driver = new Sqlite($Config);
         $driver->requireConfigKey('path');
 
-        $DbFile = new File($config['path']);
+        $DbFile = new File($driver->Config->path);
         $info = $DbFile->info();
 
         if ($info['dirname'] === '.') {
-            $DbFile = new File(rtrim($config['path'], DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'database.sqlite3');
+            $DbFile = new File(rtrim($driver->Config->path, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'database.sqlite3');
         } elseif (!isset($info['extension'])) {
-            $DbFile = new File($config['path'].'.sqlite');
+            $DbFile = new File($driver->Config->path.'.sqlite');
         }
 
         return new \PDO(sprintf('sqlite:%s', $DbFile->getPath()), '', '', [
