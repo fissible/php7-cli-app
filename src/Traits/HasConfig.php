@@ -3,6 +3,7 @@
 namespace PhpCli\Traits;
 
 use PhpCli\Arr;
+use PhpCli\Config\JsonPointer;
 use PhpCli\Config\Memory;
 use PhpCli\Interfaces\Config;
 use PhpCli\Exceptions\ConfigurationException;
@@ -20,17 +21,23 @@ trait HasConfig
         return $this->Config;
     }
 
-    // public function configSubset(string $configPointer): Config
-    // {
-    //     $this->validateConfigInitialized();
+    /**
+     * Get a JSON Pointer 
+     */
+    public function configPointer(JsonPointer $Pointer = null, array $path = []): JsonPointer
+    {
+        $prefix = $Pointer ? $Pointer->reference : '';
+        $key = '$ref';
+        $pointer = new \stdClass;
+        $pointer->$key = $prefix . implode('/', $path);
 
-    //     if (!isset($this->subsets[$configPointer])) {
-    //         $this->subsets[$configPointer] = new Config($this->Config->path, $this->Config);
-    //         $this->subsets[$configPointer]->setPointer($configPointer);
-    //     }
+        return new JsonPointer($pointer);
+    }
 
-    //     return $this->subsets[$configPointer];
-    // }
+    public function isConfigured(): bool
+    {
+        return isset($this->Config);
+    }
 
     public function setConfig($Config)
     {
@@ -83,7 +90,7 @@ trait HasConfig
 
     private function validateConfigInitialized()
     {
-        if (!isset($this->Config)) {
+        if (!$this->isConfigured()) {
             throw new \Exception('Configuration not set.');
         }
     }

@@ -316,13 +316,11 @@ if (! function_exists('tap')) {
 if (! function_exists('unwrap')) {
     function unwrap($input, $check_if_one = true)
     {
-        $output = $input;
-
-        if ((is_array($input) || $input instanceof \stdClass) && (true !== $check_if_one || count($input) === 1)) {
-            $output = current($input);
+        if ((is_array($input) || $input instanceof \stdClass) && ($check_if_one !== true || count($input) === 1)) {
+            return current($input);
         }
 
-        return $output;
+        return $input;
     }
 }
 
