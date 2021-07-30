@@ -13,6 +13,11 @@ trait RequiresServiceContainer
         if (isset($app)) {
             static::$app = $app;
         }
-        return self::$app;
+
+        if (isset(static::$app)) {
+            return self::$app;
+        }
+
+        return null;
     }
 }

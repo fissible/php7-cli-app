@@ -57,6 +57,31 @@ class Logger {
         echo $this->format($level, $data, $prefix);
     }
 
+    public function fatal($data)
+    {
+       $this->log($data, Logger::FATAL);
+    }
+
+    public function error($data)
+    {
+       $this->log($data, Logger::ERROR);
+    }
+
+    public function warning($data)
+    {
+       $this->log($data, Logger::WARNING);
+    }
+
+    public function info($data)
+    {
+       $this->log($data, Logger::INFO);
+    }
+
+    public function debug($data)
+    {
+        $this->log($data, Logger::DEBUG);
+    }
+
     public function name(): ?string
     {
         if (isset($this->Config->name)) {

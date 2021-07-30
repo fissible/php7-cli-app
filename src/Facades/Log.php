@@ -2,6 +2,7 @@
 
 namespace PhpCli\Facades;
 
+use PhpCli\Reporting\Drivers\StandardLogger;
 use PhpCli\Reporting\Logger;
 use PhpCli\Traits\RequiresServiceContainer;
 
@@ -36,12 +37,15 @@ class Log {
 
     public static function instance(string $name = null)
     {
-        if ($name) {
-            if ($config = self::app()->config()->get('logger.'.$name)) {
-                return Logger::create($config);
+        if ($app = self::app()) {
+            if ($name) {
+                if ($config = $app->config()->get('logger.'.$name)) {
+                    return Logger::create($config);
+                }
+            } else {
+                return $app->make(Logger::class);
             }
-        } else {
-            return self::app()->make(Logger::class);
         }
+        return StandardLogger::create(new \stdClass);
     }
 }

@@ -41,6 +41,6 @@ class StandardLogger extends Logger {
 
     public static function create($Config): Logger
     {
-        return new static($Config);
+        return new StandardLogger($Config);
     }
 }
