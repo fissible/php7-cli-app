@@ -3,6 +3,7 @@
 namespace PhpCli\Git;
 
 use PhpCli\Facades\Log;
+use PhpCli\Output;
 use PhpCli\Reporting\Logger;
 use PhpCli\Reporting\Drivers\NullLogger;
 use PhpCli\Str;
@@ -62,8 +63,11 @@ class Repository {
      * 
      */
 
-    public function __construct(string $directory)
+    public function __construct(string $directory = null)
     {
+        if (null === $directory) {
+            $directory = getcwd();
+        }
         $this->directory = rtrim($directory, DIRECTORY_SEPARATOR);
         git::cd($this->directory);
         $this->Index = new Stage($this);
@@ -579,7 +583,7 @@ Array
 
         print "\n".__METHOD__.':'.__LINE__;
         print ($this->Index->hasChanges() ? "has changes" : "has no changes")."\n";
-        print_r($this->status());
+        print_r($this->getStatus());
 
         // $args = ['--rebase'];
         $Remote ??= $this->remote();
@@ -896,15 +900,32 @@ Array
      *
      * @return string
      */
-    public function renderStatus(): string
+    public function status(string $path = null): string
     {
         $output = '';
-        $status = $this->status();
+        $status = $this->getStatus($path);
 
         foreach ($status as $group => $Files) {
             $output .= "\n".$group."\n";
+            $color = null;
+
+            switch ($group) {
+                case self::STR_CHANGES_TO_BE_COMMITTED:
+                    $color = 'green';
+                    break;
+                case self::STR_CHANGES_NOT_STAGED:
+                case self::STR_UNMERGED_PATHS:
+                case self::STR_UNTRACKED_FILES:
+                    $color = 'red';
+                    break;
+            }
+
             foreach ($Files as $File) {
-                $output .= "\t".$File->renderStatus()."\n";
+                $fileStatus = $File->renderStatus();
+                if ($color) {
+                    $fileStatus = Output::color($fileStatus, $color);
+                }
+                $output .= "\t". $fileStatus."\n";
             }
         }
 
@@ -929,7 +950,7 @@ Array
      *
      * @return array
      */
-    public function status(string $path = null)
+    public function getStatus(string $path = null)
     {
         $this->validateInitialized();
 

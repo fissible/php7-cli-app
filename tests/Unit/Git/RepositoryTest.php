@@ -149,7 +149,7 @@ class RepositoryTest extends TestCase {
     public function testStatus()
     {
         $Repo = new Repository(dirname(__DIR__));
-        $status = $Repo->status();
+        $status = $Repo->getStatus();
 
 // foreach ($status as $key => $Files) {
 //     $status[$key] = array_map(function ($File) {
