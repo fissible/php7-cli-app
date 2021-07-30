@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace PhpCli;
 
@@ -56,6 +56,159 @@ class Str
         $Date = new Carbon($time, $timezone);
 
         return $Date->format($format);
+    }
+
+    public static function after(string $subject, string $delimiter, int $offset = 0): string
+    {
+        if (false !== ($pos = strpos($subject, $delimiter, $offset))) {
+            return substr($subject, $pos + 1);
+        }
+
+        return $subject;
+    }
+
+    /**
+     * Get the substring of a string that to the left of the delimiter.
+     *
+     * @param string $subject
+     * @param string $delimiter
+     * @param integer $offset
+     * @return string
+     */
+    public static function before(string $subject, string $delimiter, int $offset = 0): string
+    {
+        if (false !== ($pos = strpos($subject, $delimiter, $offset))) {
+            return substr($subject, 0, $pos);
+        }
+
+        return $subject;
+    }
+
+    /**
+     * Get the substring between delimiters.
+     *
+     * @param string $subject
+     * @param string $startDelimiter
+     * @param string|null $endDelimiter
+     * @return string
+     */
+    public static function capture(string $subject, ?string $startDelimiter, ?string $endDelimiter = null): string
+    {
+        $index = -1;
+        $stopIndex = false;
+        $captured = '';
+
+        if ($startDelimiter !== null) {
+            $index = strpos($subject, $startDelimiter);
+        }
+
+        if ($endDelimiter === null) {
+            $stopIndex = strlen($subject);
+        } elseif (false !== $index) {
+            $stopIndex = strpos($subject, $endDelimiter, max($index, 0)) ?: strlen($subject);
+        }
+
+        if (false !== $stopIndex) {
+            for ($i = $index + 1; $i < $stopIndex; $i++) {
+                $captured .= $subject[$i];
+            }
+        }
+
+        return $captured;
+    }
+
+    /**
+     * Test if a string has a substring.
+     *
+     * @param string $subject
+     * @param string $substring
+     * @return boolean
+     */
+    public static function contains($subject, $substring): bool
+    {
+        return strpos($subject, $substring) !== false;
+    }
+
+    public static function endsWith($subject, $substring): bool
+    {
+        $index = strlen($subject);
+        $lenSubstring = strlen($substring);
+
+        return substr($subject, $lenSubstring * -1) === $substring;
+    }
+
+    /**
+     * Check if a string is quoted.
+     *
+     * @param string $subject
+     * @param string $char
+     * @return boolean
+     */
+    public static function isQuoted(string $subject, string $char = null): bool
+    {
+        $chars = $char ? [$char] : ["'", '"'];
+
+        foreach ($chars as $char) {
+            if ($subject[0] === $char && $subject[-1] === $char) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Trim the substring from the beginning of the string.
+     *
+     * @param [type] $subject
+     * @param [type] $prune
+     * @return void
+     */
+    public static function lprune(string $subject, string $prune): string
+    {
+        $index = strlen($subject);
+        $lenPrune = strlen($prune);
+
+        if (substr($subject, 0, $lenPrune) === $prune) {
+            return substr($subject, $lenPrune);
+        }
+
+        return $subject;
+    }
+
+    /**
+     * Trim the substring from the beginning and end of the string.
+     *
+     * @param [type] $subject
+     * @param [type] $prune
+     * @return void
+     */
+    public static function prune(string $subject, string $prune): string
+    {
+        return static::rprune(static::lprune($subject, $prune), $prune);
+    }
+
+    /**
+     * Trim the substring from the end of the string.
+     *
+     * @param [type] $subject
+     * @param [type] $prune
+     * @return void
+     */
+    public static function rprune(string $subject, string $prune): string
+    {
+        $index = strlen($subject);
+        $lenPrune = strlen($prune);
+
+        if (substr($subject, $lenPrune * -1) === $prune) {
+            return substr($subject, 0, $lenPrune * -1);
+        }
+
+        return $subject;
+    }
+
+    public static function startsWith($subject, $substring): bool
+    {
+        return strpos($subject, $substring) === 0;
     }
 
     public static function time($time_str, $format = 'g:i a')
