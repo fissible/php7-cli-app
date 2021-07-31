@@ -2,6 +2,7 @@
 
 namespace PhpCli\Git;
 
+use PhpCli\Collection;
 use PhpCli\Facades\Log;
 use PhpCli\Output;
 use PhpCli\Reporting\Logger;
@@ -21,6 +22,8 @@ class Repository {
     private Stage $Index;
 
     private Logger $Logger;
+
+    private Output $output;
 
     private array $Remotes;
 
@@ -71,6 +74,7 @@ class Repository {
         $this->directory = rtrim($directory, DIRECTORY_SEPARATOR);
         git::cd($this->directory);
         $this->Index = new Stage($this);
+        $this->output = new Output();
     }
 
     /**
@@ -172,9 +176,7 @@ class Repository {
         $args[] = $branch;
         $args[] = $remote;
 
-        $output = git::checkout(...$args);
-
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log(git::checkout(...$args));
 
         return $this;
     }
@@ -218,9 +220,7 @@ class Repository {
             $args[] = $path;
         }
 
-        $output = git::commit(...$args);
-
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log(git::commit(...$args));
 
 
         // print_r($output);
@@ -337,17 +337,71 @@ Array
     }
 
     /**
-     * Get an array of Files each with their discrete diff.
+     * Render the diff to a string.
      *
      * @param string $path
-     * @return array
+     * @return string
      */
-    public function diff(string $path = null): array
+    public function diff(string $path = null, bool $staged = false): self
     {
-        $lines = git::diff($path);
-        $diffs = Diff::parseFiles($lines);
+        $diffs = $this->getDiff($path, $staged);
 
-        return $diffs;
+        foreach ($diffs as $File) {
+            $diffString = $File->diff() . '';
+            $lines = explode("\n", $diffString);
+
+            foreach ($lines as $lkey => $line) {
+                if (!empty($line)) {
+                    if ($line[0] === '-') {
+                        $lines[$lkey] = Output::color($line, 'red');
+                    } elseif ($line[0] === '+') {
+                        $lines[$lkey] = Output::color($line, 'green');
+                    } elseif (Str::startsWith($line, '@@ ')) {
+                        if ($sectionHeader = Str::capture($line, '@@', '@@')) {
+                            $sectionHeader = '@@' . $sectionHeader . '@@';
+                            $lines[$lkey] = Str::replace($line, $sectionHeader, Output::color($sectionHeader, 'light_purple'));
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->output->lines($lines);
+
+        return $this;
+    }
+
+    public function discard(string $path = null)
+    {
+        $output = [];
+        $StagedFiles = new Collection($this->getDiff($path, true));
+
+        if (!$StagedFiles->empty()) {
+            $StagedFiles->each(function (File $File) use (&$output) {
+                $output = array_merge($output, git::reset('--', $File->getPath()));
+            });
+        }
+
+        $Files = new Collection($this->getDiff($path, false));
+        $ModifiedFiles = $Files->filter(function (File $File) {
+            return $File->isModified();
+        });
+
+        if (!$ModifiedFiles->empty()) {
+            if (version_compare(git::version(), '2.25', '>')) {
+                $ModifiedFiles->each(function (File $File) use (&$output) {
+                    $output = array_merge($output, ...git::restore($File->getPath()));
+                });
+            } else {
+                $ModifiedFiles->each(function (File $File) use (&$output) {
+                    $output = array_merge($output, ...git::checkout('--', $File->getPath()));
+                });
+            }
+        }
+
+        $this->_log($output);
+
+        return $this;
     }
 
     /**
@@ -393,6 +447,30 @@ Array
     public function getCommit(string $hash): Commit
     {
         return new Commit($hash);
+    }
+
+    /**
+     * Get an array of Files each with their discrete diff.
+     *
+     * @param string $path
+     * @param bool $staged
+     * @return array
+     */
+    public function getDiff(string $path = null, bool $staged = false): array
+    {
+        $args = [];
+
+        if ($staged) {
+            $args[] = '--cached';
+            $args[] = '--';
+        }
+
+        $args[] = $path;
+
+        $lines = git::diff(...$args);
+        $diffs = Diff::parseFiles($lines);
+
+        return $diffs;
     }
 
     /**
@@ -489,9 +567,7 @@ Array
 
         // $args[] = '--autostash';
 
-        $output = git::merge(...$args);
-
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log(git::merge(...$args));
 
         // print_r($output);
         /*
@@ -526,7 +602,7 @@ Array
     {
         $output = git::merge('--abort');
 
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log($output);
 
         print "\n".__METHOD__.':'.__LINE__;
         print_r($output);
@@ -560,9 +636,7 @@ Array
             throw new \Exception('No configured push destination.');
         }
 
-        $output = git::push('-u', $Remote->name(), $Branch->name());
-
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log(git::push('-u', $Remote->name(), $Branch->name()));
 
         return git::result() === 0;
     }
@@ -597,11 +671,8 @@ Array
             $args[] = $remoteBranch;
         }
 
-        $output = git::pull(...$args);
+        $this->_log(git::pull(...$args));
 
-        $this->Logger()->info(implode("\n", $output));
-
-        // print_r($output);
         /*
 
         pull()
@@ -757,12 +828,9 @@ Array
             $args[] = $branches;
         }
 
-        $output = git::push(...$args);
-
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log(git::push(...$args));
 
         /*
-        print_r($output);
 
         push branch that does not exist on remote
 
@@ -878,29 +946,11 @@ Array
     }
 
     /**
-     * Render the diff to a string.
-     *
-     * @param string $path
-     * @return string
-     */
-    public function renderDiff(string $path = null): string
-    {
-        $output = '';
-        $diffs = $this->diff($path);
-
-        foreach ($diffs as $File) {
-            $output .= $File->diff()."\n";
-        }
-
-        return $output;
-    }
-
-    /**
      * Get the status as a string.
      *
-     * @return string
+     * @return self
      */
-    public function status(string $path = null): string
+    public function status(string $path = null): self
     {
         $output = '';
         $status = $this->getStatus($path);
@@ -929,7 +979,9 @@ Array
             }
         }
 
-        return $output;
+        $this->output->line($output);
+
+        return $this;
     }
 
     /**
@@ -958,11 +1010,7 @@ Array
         $changes = [];
         $output = git::status(git::porcelain(), '--branch', $path);
 
-// print "\n";
-// var_export($output);
-// print "\n";
-
-        foreach ($output as $key => $line) {
+        foreach ($output as $line) {
             if ($line[0] === '#') {
                 $headers[] = ltrim(trim($line), '#');
             } elseif (strlen($line)) {
@@ -1007,7 +1055,6 @@ Array
         $Files = array_map(function ($line) {
             $info = File::parseStatus($line);
             $File = new File($info['path'], $info['worktree_status']);
-            $File->setRepositoryPath($this->path()); // not needed if not writing/deleting files with this lib
 
             if (isset($info['index_status'])) {
                 $File->setIndexStatus($info['index_status']);
@@ -1063,9 +1110,7 @@ Array
      */
     public function tag(string $tag): self
     {
-        $output = git::tag($tag);
-
-        $this->Logger()->info(implode("\n", $output));
+        $this->_log(git::tag($tag));
         
         if (git::result()) {
             throw new \Exception(sprintf('Error creating tag "%s"', $tag));
@@ -1245,5 +1290,12 @@ Untracked files:
         }
         
         return $this->Logger;
+    }
+
+    private function _log(array $data, string $level = Logger::INFO)
+    {
+        if (count($data)) {
+            $this->Logger()->log(implode("\n", $data), $level);
+        }
     }
 }

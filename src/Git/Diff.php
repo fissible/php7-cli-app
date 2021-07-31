@@ -166,8 +166,9 @@ class Diff {
         while (!empty($lines) && !Str::startsWith($lines[0], 'diff')) {
             array_shift($lines);
         }
+
         if (empty($lines)) {
-            throw new \InvalidArgumentException('No file diffs found in commit output');
+            return [];
         }
 
         $i = -1;

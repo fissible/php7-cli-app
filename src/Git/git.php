@@ -27,6 +27,7 @@ class git {
         static::$working_directory = $path;
     }
 
+
     /**
      * Get the porcelain option string.
      * Give the output in an easy-to-parse format for scripts.
@@ -57,8 +58,10 @@ class git {
     public static function version(): string
     {
         $output = static::git('--version');
+        $versionString = $output[0];
+        $version = Str::after($versionString, 'git version ');
 
-        return $output[0];
+        return $version;
     }
 
     public static function __callStatic($name, $arguments)

@@ -47,7 +47,7 @@ class Stage {
      */
     public function getChanges(): array
     {
-        $status = $this->Repository->status();
+        $status = $this->Repository->getStatus();
 
         return array_filter(array_merge(
             // 'Changes to be committed:' 

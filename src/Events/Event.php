@@ -2,11 +2,17 @@
 
 namespace PhpCli\Events;
 
+use PhpCli\Collection;
+
 class Event extends \Exception
 {
+    private static Collection $Handlers;
+
     public function __construct()
     {
         parent::__construct(get_class($this), 0);
+
+        static::$Handlers = new Collection();
     }
 
     /**
@@ -15,7 +21,24 @@ class Event extends \Exception
     public static function fire()
     {
         $args = func_get_args();
-        throw new static(...$args);
+
+        if (static::$Handlers->empty()) {
+            throw new static(...$args);
+        }
+
+        static::$Handlers->each(function (Handler $Handler) use ($args) {
+            return $Handler(...$args);
+        });
+    }
+
+    public static function subscribe(Handler $Handler)
+    {
+        static::$Handlers->push($Handler);
+    }
+
+    public static function unsubscribe(Handler $Handler)
+    {
+        static::$Handlers->delete($Handler);
     }
 
     public function __get($name)

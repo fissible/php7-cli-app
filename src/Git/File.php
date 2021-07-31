@@ -6,8 +6,6 @@ class File {
 
     private string $path;
 
-    private string $repository_path;
-
     private string $original_path;
 
     private string $worktree_status;
@@ -34,7 +32,7 @@ class File {
         'stage3' => null
     ];
 
-    public function __construct(string $path, $worktree_status = 'untracked', $index_status = null)
+    public function __construct(string $path, $worktree_status = 'untracked', $index_status = 'unmodified')
     {
         $this->path = $path;
         $this->setWorktreeStatus($worktree_status);
@@ -235,53 +233,11 @@ class File {
         return $this;
     }
 
-    public function setRepositoryPath(string $path): self
-    {
-        $this->repository_path = $path;
-
-        return $this;
-    }
-
     public function setWorktreeStatus(string $status): self
     {
         $this->worktree_status = $status;
 
         return $this;
-    }
-
-    /**
-     * Delete the file.
-     *
-     * @return boolean
-     */
-    private function delete(): bool
-    {
-        $this->validateFullPath();
-
-        return unlink($this->repository_path.$this->path);
-    }
-
-    private function validateFullPath()
-    {
-        if (!isset($this->repository_path)) {
-            throw new \Exception('File does not have the repository path configured');
-        }
-    }
-
-    /**
-     * Undocumented function
-     *
-     * @param string $content
-     * @param boolean $append
-     * @return int
-     */
-    private function write(string $content, bool $append = false): int
-    {
-        $this->validateFullPath();
-
-        $filename = $this->repository_path.$this->path;
-        
-        return (int) file_put_contents($filename, $content, $append ? FILE_APPEND : 0);
     }
 
     public static function parseStatus(string $status_line)
