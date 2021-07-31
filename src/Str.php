@@ -61,7 +61,7 @@ class Str
     public static function after(string $subject, string $delimiter, int $offset = 0): string
     {
         if (false !== ($pos = strpos($subject, $delimiter, $offset))) {
-            return substr($subject, $pos + 1);
+            return substr($subject, $pos + strlen($delimiter));
         }
 
         return $subject;
@@ -99,7 +99,7 @@ class Str
         $captured = '';
 
         if ($startDelimiter !== null) {
-            $index = strpos($subject, $startDelimiter);
+            $index = strpos($subject, $startDelimiter) + strlen($startDelimiter);
         }
 
         if ($endDelimiter === null) {
@@ -109,7 +109,7 @@ class Str
         }
 
         if (false !== $stopIndex) {
-            for ($i = $index + 1; $i < $stopIndex; $i++) {
+            for ($i = $index; $i < $stopIndex; $i++) {
                 $captured .= $subject[$i];
             }
         }

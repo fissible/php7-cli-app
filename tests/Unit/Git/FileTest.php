@@ -26,7 +26,7 @@ class FileTest extends TestCase {
         // Test add new file
         file_put_contents($Repo->path($filename), 'Initial content.');
 
-        $File = $Repo->status($filename)[0];
+        $File = $Repo->getStatus($filename)[0];
 
         $this->assertEquals('untracked', $File->getIndexStatus());
         $this->assertEquals('untracked', $File->getWorktreeStatus());
@@ -38,14 +38,14 @@ class FileTest extends TestCase {
         $this->assertEquals('added', $File->getIndexStatus());
         $this->assertEquals('unmodified', $File->getWorktreeStatus());
 
-        $File = $Repo->status($filename)[0];
+        $File = $Repo->getStatus($filename)[0];
 
         $this->assertEquals('added', $File->getIndexStatus());
         $this->assertEquals('unmodified', $File->getWorktreeStatus());
 
         git::commit('-m', '"Initial commit"');
 
-        $Files = $Repo->status($filename);
+        $Files = $Repo->getStatus($filename);
 
         $this->assertEmpty($Files);
 
@@ -54,7 +54,7 @@ class FileTest extends TestCase {
         $newfilename = 'tmp_text.txt';
         rename($Repo->path($filename), $Repo->path($newfilename));
 
-        $File = $Repo->status($filename)[0];
+        $File = $Repo->getStatus($filename)[0];
 
         $this->assertEquals('unmodified', $File->getIndexStatus());
         $this->assertEquals('deleted', $File->getWorktreeStatus());
@@ -67,7 +67,7 @@ class FileTest extends TestCase {
         $this->assertEquals('deleted', $File->getIndexStatus());
         $this->assertEquals('unmodified', $File->getWorktreeStatus());
 
-        $Files = $Repo->status(); // Global status check combines add and delete into a rename
+        $Files = $Repo->getStatus(); // Global status check combines add and delete into a rename
         $File = $Files[Repository::STR_CHANGES_TO_BE_COMMITTED][0];
 
         $this->assertEquals('renamed', $File->getIndexStatus());
@@ -81,7 +81,7 @@ class FileTest extends TestCase {
         // Test copy tracked file
         copy($Repo->path($filename), $Repo->path($newfilename));
 
-        $File = $Repo->status($newfilename)[0];
+        $File = $Repo->getStatus($newfilename)[0];
 
         $this->assertEquals('untracked', $File->getIndexStatus());
         $this->assertEquals('untracked', $File->getWorktreeStatus());
@@ -92,7 +92,7 @@ class FileTest extends TestCase {
         // Test modify tracked file
         file_put_contents($Repo->path($filename), 'Updated content.');
 
-        $File = $Repo->status($filename)[0];
+        $File = $Repo->getStatus($filename)[0];
 
         $this->assertEquals('unmodified', $File->getIndexStatus());
         $this->assertEquals('modified', $File->getWorktreeStatus());
@@ -101,7 +101,7 @@ class FileTest extends TestCase {
         // Test deleting tracked file
         unlink($Repo->path('text.txt'));
 
-        $File = $Repo->status($filename)[0];
+        $File = $Repo->getStatus($filename)[0];
 
         $this->assertEquals('unmodified', $File->getIndexStatus());
         $this->assertEquals('deleted', $File->getWorktreeStatus());
