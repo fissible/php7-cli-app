@@ -1,0 +1,16 @@
+{
+    "services": {
+        "eCFR": {
+            "$ref": "ApiSchema/eCFR.json#"
+        }
+    },
+    "test": {
+        "driver": {
+            "$ref": "#/logger/driver"
+        }
+    },
+    "logger": {
+        "driver": "file",
+        "path": "/Users/allen/scripts/cli/tests/logs"
+    }
+}
