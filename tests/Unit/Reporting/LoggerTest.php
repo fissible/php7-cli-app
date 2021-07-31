@@ -4,7 +4,7 @@ namespace Tests\Unit\Reporting;
 
 use PhpCli\Application;
 use PhpCli\Facades\Log;
-use PhpCli\Filesystem\File;
+use PhpCli\Filesystem\Directory;
 use PhpCli\Reporting\Logger;
 use PhpCli\Reporting\Drivers\StandardLogger;
 use PHPUnit\Framework\TestCase;
@@ -66,7 +66,7 @@ class LoggerTest extends TestCase
 
         $expected = date('Y-m-d H:i:s').' - info: FileLogger resolved'."\n";
         Log::info('FileLogger resolved');
-        $LogDir = new File($path);
+        $LogDir = new Directory($path);
         $out = $LogDir->files()[0]->read();
 
         foreach ($LogDir->files() as $File) {

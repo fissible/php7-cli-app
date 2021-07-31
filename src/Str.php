@@ -94,18 +94,22 @@ class Str
      */
     public static function capture(string $subject, ?string $startDelimiter, ?string $endDelimiter = null): string
     {
-        $index = -1;
+        $index = 0;
         $stopIndex = false;
         $captured = '';
 
         if ($startDelimiter !== null) {
-            $index = strpos($subject, $startDelimiter) + strlen($startDelimiter);
+            $index = strpos($subject, $startDelimiter);
         }
 
         if ($endDelimiter === null) {
             $stopIndex = strlen($subject);
         } elseif (false !== $index) {
             $stopIndex = strpos($subject, $endDelimiter, max($index, 0)) ?: strlen($subject);
+        }
+
+        if (!is_null($startDelimiter)) {
+            $index += strlen($startDelimiter);
         }
 
         if (false !== $stopIndex) {

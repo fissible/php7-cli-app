@@ -3,7 +3,7 @@
 namespace PhpCli;
 
 use PhpCli\Config\Json;
-use PhpCli\Database\Driver as DatabaseDriver;
+use PhpCli\Database\Drivers\Driver as DatabaseDriver;
 use PhpCli\Database\Query;
 use PhpCli\Events\Abort;
 use PhpCli\Events\Event;
@@ -11,7 +11,6 @@ use PhpCli\Exceptions\ConfigNotFoundException;
 use PhpCli\Exceptions\MissingArgumentException;
 use PhpCli\Facades\Log;
 use PhpCli\Filesystem\File;
-use PhpCli\Interfaces\Config;
 use PhpCli\Reporting\Logger;
 use PhpCli\Traits\HasConfig;
 use PhpCli\Traits\RequiresBinary;
