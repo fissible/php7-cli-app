@@ -2,7 +2,6 @@
 
 namespace PhpCli\Tx;
 
-use PhpCli\Filesystem\File;
 use PhpCli\Tx\Request;
 use PhpCli\Tx\Response;
 
@@ -44,29 +43,29 @@ class Net
 
     // public function __construct() new Network?
 
-    public static function delete(string $url, array $headers = [], $options = []): Response
+    public static function delete(string $url, array $headers = [], array $options = []): Response
     {
-        return static::request('DELETE', $url, $headers, $options)->delete();
+        return static::request($url, $headers, $options)->delete();
     }
 
-    public static function get(string $url, array $query = [], array $headers = [], $options = []): Response
+    public static function get(string $url, array $query = [], array $headers = [], array $options = []): Response
     {
-        return static::request('GET', $url, $headers, $options)->get($query);
+        return static::request($url, $headers, $options)->get($query);
     }
 
-    public static function patch(string $url, array $body = [], array $headers = [], array $files = [], $options = []): Response
+    public static function patch(string $url, array $body = [], array $headers = [], array $files = [], array $options = []): Response
     {
-        return static::request('PATCH', $url, $headers, $options)->patch($body, $files);
+        return static::request($url, $headers, $options)->patch($body, $files);
     }
 
-    public static function post(string $url, array $body = [], array $headers = [], array $files = [], $options = []): Response
+    public static function post(string $url, array $body = [], array $headers = [], array $files = [], array $options = []): Response
     {
-        return static::request('POST', $url, $headers, $options)->post($body, $files);
+        return static::request($url, $headers, $options)->post($body, $files);
     }
 
-    public static function put(string $url, array $body = [], array $headers = [], array $files = [], $options = []): Response
+    public static function put(string $url, array $body = [], array $headers = [], array $files = [], array $options = []): Response
     {
-        return static::request('PUT', $url, $headers, $options)->put($body, $files);
+        return static::request($url, $headers, $options)->put($body, $files);
     }
 
     /**
@@ -78,7 +77,7 @@ class Net
      * @param array $options
      * @return Request
      */
-    public static function request(string $method = 'GET', string $url, array $headers = [], array $options = []): Request
+    public static function request(string $url, array $headers = [], array $options = [], string $method = 'GET'): Request
     {
         $Request = new Request($url, $headers, $options, $method);
 
