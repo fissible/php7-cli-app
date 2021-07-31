@@ -200,29 +200,25 @@ function env($key, $default = null)
 // {
 //     global $errors;
 //     if (!is_null($error_msg)) {
-//         if (IS_CLI) {
-//             printl($error_msg);
-//         } else {
-//             $errors[] = $error_msg;
-//         }
+//         printl($error_msg);
 //     }
-//     if (! is_null($command) && IS_CLI) {
+//     if (! is_null($command)) {
 //         usage($command);
 //     }
 // }
 
-/**
- * Output errors and return with status code 1
- * @param null $error_msg
- * @param int $exit_code
- */
-function error_exit($error_msg = null, $exit_code = 1)
-{
-    global $errors;
-    error($error_msg);
-    show_errors();
-    exit($exit_code);
-}
+// /**
+//  * Output errors and return with status code 1
+//  * @param null $error_msg
+//  * @param int $exit_code
+//  */
+// function error_exit($error_msg = null, $exit_code = 1)
+// {
+//     global $errors;
+//     error($error_msg);
+//     show_errors();
+//     exit($exit_code);
+// }
 
 // /**
 //  * Output errors
