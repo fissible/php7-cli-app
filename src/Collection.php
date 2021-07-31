@@ -349,7 +349,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
         if ($set) {
             if ($set instanceof Collection) {
                 $set = $set->toArray();
-            } elseif (!is_array($set) && !($set instanceof Traversable)) {
+            } elseif (!is_array($set) && !($set instanceof \Traversable)) {
                 throw new \InvalidArgumentException();
             }
             foreach ($set as $k => $value) {
