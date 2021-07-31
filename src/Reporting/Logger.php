@@ -125,17 +125,23 @@ class Logger {
         ], $prefix));
 
         // Coerce data to a string
+        $data = static::itemToString($data);
+        $prefix = implode(static::$prefixJoin, $prefix);
+
+        return sprintf('%s: %s', $prefix, $data);
+    }
+
+    protected static function itemToString($data): string
+    {
         if (!is_string($data)) {
             if (is_object($data) && method_exists($data, '__toString')) {
-                $data = ''.$data;
+                $data = '' . $data;
             } else {
                 $data = var_export($data, true);
             }
         }
 
-        $prefix = implode(static::$prefixJoin, $prefix);
-
-        return sprintf('%s: %s', $prefix, $data);
+        return $data;
     }
 
     protected function validateLevel(string $level)

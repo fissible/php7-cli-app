@@ -26,7 +26,10 @@ class StandardLogger extends Logger {
     {
         $this->validateLevel($level);
 
-        $entry = $this->format($level, $data, $prefix);
+        $entry = static::itemToString($data);
+        if ($prefix = implode(static::$prefixJoin, $prefix)) {
+            $entry = $prefix . ': ' . $entry;
+        }
 
         switch ($level) {
             case LOGGER::FATAL:
