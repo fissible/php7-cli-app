@@ -2,6 +2,7 @@
 
 namespace PhpCli\Filesystem;
 
+use PhpCli\Str;
 use PhpCli\Exceptions\FileNotFoundException;
 use PhpCli\Exceptions\InvalidFileModeException;
 
@@ -126,7 +127,10 @@ class File {
     public function __construct(string $path, string $mode = self::READ_WRITE, $resource = null)
     {
         $this->setPath($path);
-        $this->setMode($mode);
+
+        if (!$this->isDir()) {
+            $this->setMode($mode);
+        }
 
         if (!is_null($resource)) {
             $this->setResource($resource);
@@ -232,7 +236,7 @@ class File {
      * @param File $Destination
      * @return File
      */
-    public function copy(File $Destination): File
+    public function copy(File $Destination)
     {
         /*
             Source ($this)      Destination                     Operation
@@ -243,9 +247,6 @@ class File {
         DIR /tmp/logs      FILE /Users/bob/logs/today.log       ERROR
 
         */
-        if ($this->isDir() && !$Destination->isDir()) {
-            throw new \InvalidArgumentException(sprintf('Cannot copy directory %s into destination filepath %s', $this->path, $Destination->path));
-        }
 
         // Create directories that do not exist in the destination path
         if ($Directory = $Destination->getDir()) {
@@ -254,26 +255,12 @@ class File {
             }
         }
 
-        switch (true) {
-            // FILE to DIR
-            case (!$this->isDir() && $Destination->isDir()):
-                if (!$Destination->exists()) {
-                    $Destination->create(0777);
-                }
-                $Destination = new File($Destination->path . DIRECTORY_SEPARATOR . $this->getFilename());
-                break;
-            // DIR to DIR
-            case ($this->isDir() && $Destination->isDir()):
-                if (!$Destination->exists()) {
-                    $Destination->create($this->getPermissions());
-                }
-
-                foreach ($this->files() as $File) {
-                    $File->copy(new File($Destination->path . DIRECTORY_SEPARATOR . $File->filename));
-                }
-
-                return $Destination;
-                break;
+        // If a directory is the destination, append this file's filename.
+        if ($Destination->isDir()) {
+            if (!$Destination->exists()) {
+                $Destination->create(0777);
+            }
+            $Destination = new File($Destination->path . DIRECTORY_SEPARATOR . $this->getFilename());
         }
 
         if ($Destination->exists()) {
@@ -306,23 +293,18 @@ class File {
         }
 
         $mode = $mode ?? 0777;
-        $created = false;
 
-        if ($this->isDir()) {
-            if ($created = mkdir($this->path, $mode, true)) {
-                clearstatcache();
-                $this->setMode();
-            }
-        } elseif (touch($this->path)) {
-            $created = true;
+        if (touch($this->path)) {
             $this->setMode();
 
             if (!$this->chmod($mode)) {
                 throw new \Exception('%s: error setting permissions to %o', $mode);
             }
+
+            return true;
         }
 
-        return $created;
+        return false;
     }
 
     public function delete(bool $recurse = false): bool
@@ -331,23 +313,13 @@ class File {
             throw new InvalidFileModeException($this->path, $this->mode, 'Error deleting file');
         }
 
-        if ($this->isDir() && $recurse) {
-            foreach ($this->files() as $File) {
-                $File->delete(true);
-            }
-        }
-
-        if ($this->isDir() && !$this->empty()) {
-            throw new \Exception(sprintf('Directory "%s" not empty.', $this->path));
-        }
-
-        $deleted = $this->isDir() ? rmdir($this->path) : unlink($this->path);
-
-        if ($deleted) {
+        if (unlink($this->path)) {
             $this->setMode();
+
+            return true;
         }
 
-        return $deleted;
+        return false;
     }
 
     public function empty(): bool
@@ -356,9 +328,6 @@ class File {
             throw new FileNotFoundException($this->path);
         }
 
-        if ($this->isDir()) {
-            return count($this->files()) == 0;
-        }
         return count($this->read(true)) == 0;
     }
 
@@ -369,57 +338,15 @@ class File {
     }
 
     /**
-     * @return array
-     */
-    public function files(): array
-    {
-        if (!$this->exists()) {
-            throw new FileNotFoundException($this->path);
-        }
-
-        if (!$this->isDir()) {
-            throw new \InvalidArgumentException('This file is not a directory.');
-        }
-
-        $results = [];
-
-        foreach (scandir($this->path) as $value) {
-            if ($value === "." || $value === "..") {
-                continue;
-            }
-
-            $File = new File($this->path.DIRECTORY_SEPARATOR.$value);
-            if ($File->exists()) {
-                $results[] = $File;
-            }
-        }
-
-        return $results;
-    }
-
-    /**
-     * @param callable $matcher
-     * @return array
-     */
-    public function filesMatch(callable $matcher): array
-    {
-        $results = array_filter($this->files(), function ($file) use ($matcher) {
-            return $matcher($file) === true;
-        });
-
-        return array_values($results);
-    }
-
-    /**
      * Get this file's directory.
      * 
-     * @reutrn File|null
+     * @reutrn Directory|null
      */
-    public function getDir(): ?File
+    public function getDir(): ?Directory
     {
         $dirname = dirname($this->path);
         if ($dirname !== $this->path) {
-            return new File($dirname);
+            return new Directory($dirname);
         }
         return null;
     }
@@ -427,12 +354,12 @@ class File {
     /**
      * Same as getDir() unless the file does not exist, then it gets the closest existing ancestor.
      * 
-     * @return File|null
+     * @return Directory|null
      */
-    public function getAncestor(): ?File
+    public function getAncestor(): ?Directory
     {
         $Ancestor = $this->getDir();
-        while ($Ancestor instanceof File && !$Ancestor->exists()) {
+        while ($Ancestor instanceof Directory && !$Ancestor->exists()) {
             $Ancestor = $Ancestor->getDir();
         }
 
@@ -490,7 +417,7 @@ class File {
      * 
      * @return File|null
      */
-    public function getParent(): ?File
+    public function getParent(): ?Directory
     {
         if (!isset($this->Parent)) {
             if ($DirectoryFile = $this->getDir()) {
@@ -524,6 +451,20 @@ class File {
         return decoct(fileperms($this->path) & 0777);
     }
 
+    /**
+     * Check if this file has the provided file extension.
+     * 
+     * @param string $extension
+     * @return bool
+     */
+    public function hasExtension(string $extension = null): bool
+    {
+        if (is_null($extension)) {
+            return isset($this->info['extension']) && !empty($this->info['extension']);
+        }
+        return Str::endsWith($this->path, $extension);
+    }
+
     public function info(): array
     {
         return $this->info;
@@ -532,13 +473,18 @@ class File {
     public function isDir(): bool
     {
         if (!$this->exists()) {
-            return !isset($this->info['extension']);
+            return $this instanceof Directory;
         }
+
         return is_dir($this->path);
     }
 
     public function isReadOnly(): bool
     {
+        if ($this->isDir()) {
+            throw new \InvalidArgumentException('This file is a directory.');
+        }
+
         return in_array($this->mode, [
             self::READ_ONLY,
             self::EXISTS_READ_ONLY,
@@ -549,6 +495,10 @@ class File {
 
     public function isWriteOnly(): bool
     {
+        if ($this->isDir()) {
+            throw new \InvalidArgumentException('This file is a directory.');
+        }
+
         return in_array($this->mode, [
             self::WRITE_ONLY,
             self::CREATE_TRUNCATE_WRITE_ONLY,
@@ -558,6 +508,10 @@ class File {
 
     public function isReadWrite(): bool
     {
+        if ($this->isDir()) {
+            throw new \InvalidArgumentException('This file is a directory.');
+        }
+
         return in_array($this->mode, [
             self::READ_WRITE,
             self::EXISTS_READ_WRITE_APPEND,
@@ -603,14 +557,14 @@ class File {
     }
 
     /**
-     * Get a File object for the provided path relative to this file.
+     * Get a file path for the provided path relative to this file.
      */
-    public function path(string $relative): ?string
+    public function path(string $relative, $mustExist = false): ?string
     {
         $thisPath = $this->isDir() ? $this->path : dirname($this->path);
         $path = ltrim($relative, DIRECTORY_SEPARATOR);
         $up = 0;
-        
+  
         if (substr($path, 0, 2) === '.'.DIRECTORY_SEPARATOR) {
             $path = substr($path, 2);
             $up =+ 0;
@@ -621,19 +575,22 @@ class File {
             }
         }
 
-        $File = $this;
-        while ($up > 0 && $File = $File->getDir()) {
-            $thisPath = $File->getPath();
-            $up--;
+        if ($up > 0) {
+            $parts = explode(DIRECTORY_SEPARATOR, $thisPath);
+            $thisPath = implode(DIRECTORY_SEPARATOR, array_slice($parts, 0, count($parts) - $up));
         }
-        
-        $_path = realpath($thisPath.DIRECTORY_SEPARATOR.$path);
 
-        if (false === $_path) {
-            throw new FileNotFoundException($thisPath.DIRECTORY_SEPARATOR.$path);
+        $finalPath = $thisPath . DIRECTORY_SEPARATOR . $path;
+
+        if ($mustExist) {
+            if (!($realPath = realpath($finalPath))) {
+                throw new FileNotFoundException($thisPath.DIRECTORY_SEPARATOR.$path);
+            }
+
+            return $realPath;
         }
-        
-        return $_path;
+
+        return $finalPath;
     }
 
     public function rename(string $newFilename): bool
@@ -720,6 +677,10 @@ class File {
      */
     public function setMode(string $mode = null): ?string
     {
+        if ($this->isDir()) {
+            throw new \InvalidArgumentException('This file is a directory.');
+        }
+
         $exists = $this->exists();
         $current = $this->mode ?? null;
 
@@ -872,6 +833,19 @@ class File {
         return null;
     }
 
+    /**
+     * @param string $path
+     * @return self
+     */
+    protected function setPath(string $path): self
+    {
+        $this->path = rtrim($path, DIRECTORY_SEPARATOR);
+        $this->info = pathinfo($path);
+        $this->parts = array_filter(explode(DIRECTORY_SEPARATOR, $this->path));
+
+        return $this;
+    }
+
     public function __destruct()
     {
         $this->close();
@@ -911,19 +885,6 @@ class File {
 
         return true;
 
-    }
-
-    /**
-     * @param string $path
-     * @return self
-     */
-    private function setPath(string $path): self
-    {
-        $this->path = rtrim($path, DIRECTORY_SEPARATOR);
-        $this->info = pathinfo($path);
-        $this->parts = array_filter(explode(DIRECTORY_SEPARATOR, $this->path));
-
-        return $this;
     }
 
     /**

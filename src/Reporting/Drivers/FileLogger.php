@@ -2,6 +2,7 @@
 
 namespace PhpCli\Reporting\Drivers;
 
+use PhpCli\Filesystem\Directory;
 use PhpCli\Filesystem\File;
 use PhpCli\Reporting\Logger;
 
@@ -49,17 +50,22 @@ class FileLogger extends Logger {
         $extension = $this->Config->get('extension') ?? static::$fileExtension;
         $File = new File($this->Config->path);
 
-        if ($File->isDir()) {
-            if (!$File->exists()) {
-                $File->create($directoryPermissions);
+        if ($File->hasExtension($extension)) {
+            $Dir = $File->getDir();
+            $File->setMode(File::CREATE_TRUNCATE_READ_WRITE);
+        } else {
+            $Dir = new Directory($this->Config->path);
+
+            $filename = date('Y-m-d') . '.' . $extension;
+            if ($this->Config->get('files.' . $level)) {
+                $filename = $this->Config->get('files.' . $level) . '.' . $extension;
             }
 
-            $filename = date('Y-m-d').'.'.$extension;
-            if ($this->Config->get('files.'.$level)) {
-                $filename = $this->Config->get('files.'.$level).'.'.$extension;
-            }
+            $File = new File($Dir->path($filename), File::CREATE_TRUNCATE_READ_WRITE);
+        }
 
-            $File = new File($File->getPath().DIRECTORY_SEPARATOR.$filename);
+        if (!$Dir->exists()) {
+            $Dir->create($directoryPermissions);
         }
 
         if (!$File->exists()) {

@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PhpCli\Exceptions\FileNotFoundException;
 use PhpCli\Exceptions\InvalidFileModeException;
+use PhpCli\Filesystem\Directory;
 use PhpCli\Filesystem\File;
 use Tests\TestCase;
 
@@ -109,7 +110,7 @@ final class FileTest extends TestCase
         file_put_contents($srcPath, "{\n\t\"hits\": 147\n}");
 
         $DayLog = new File($srcPath);
-        $ArchiveDirectory = new File($dirPath);
+        $ArchiveDirectory = new Directory($dirPath);
 
         $this->assertTrue(file_exists($srcPath));
         $this->assertTrue(file_exists($DayLog->path));
@@ -132,8 +133,8 @@ final class FileTest extends TestCase
         mkdir($srcPath, 0777, true);
         file_put_contents($srcFilePath, 'This is just the file.');
 
-        $SrcDir = new File($srcPath);
-        $DestDir = new File($destPath);
+        $SrcDir = new Directory($srcPath);
+        $DestDir = new Directory($destPath);
 
         $this->assertTrue(file_exists($srcPath));
         $this->assertTrue(file_exists($srcFilePath));
@@ -187,7 +188,7 @@ final class FileTest extends TestCase
 
         $this->assertFalse(file_exists($path));
 
-        $DirFile = new File($this->dirpath);
+        $DirFile = new Directory($this->dirpath);
 
         $this->assertFalse(file_exists($path));
 
@@ -199,20 +200,19 @@ final class FileTest extends TestCase
     public function testDeleteFailsFileMode()
     {
         mkdir($this->dirpath);
+        file_put_contents($this->path, 'test');
 
-        $this->assertTrue(is_dir($this->dirpath));
-
-        $DirFile = new File($this->dirpath, File::EXISTS_READ_ONLY);
+        $DirFile = new File($this->path, File::EXISTS_READ_ONLY);
 
         $this->expectException(InvalidFileModeException::class);
-        $this->expectExceptionMessage(sprintf('Error deleting file: %s has an invalid file mode %s', $this->dirpath, File::EXISTS_READ_ONLY));
+        $this->expectExceptionMessage(sprintf('Error deleting file: %s has an invalid file mode %s', $this->path, File::EXISTS_READ_ONLY));
 
         $DirFile->delete();
     }
 
     public function testDeleteFailsDirectoryNotEmpty()
     {
-        $DirFile = new File($this->dirpath);
+        $DirFile = new Directory($this->dirpath);
         mkdir($this->dirpath);
         file_put_contents($this->path, 'test');
 
@@ -225,7 +225,7 @@ final class FileTest extends TestCase
 
     public function testDelete()
     {
-        $DirFile = new File($this->dirpath);
+        $DirFile = new Directory($this->dirpath);
 
         $this->assertFalse(file_exists($this->dirpath));
 
@@ -261,7 +261,7 @@ final class FileTest extends TestCase
 
     public function testEmpty()
     {
-        $DirFile = new File($this->dirpath);
+        $DirFile = new Directory($this->dirpath);
         mkdir($this->dirpath);
 
         $this->assertTrue($DirFile->empty());
@@ -297,7 +297,7 @@ final class FileTest extends TestCase
 
     public function testFilesDirectoryNotFound()
     {
-        $Dir = new File($this->dirpath);
+        $Dir = new Directory($this->dirpath);
 
         $this->expectException(FileNotFoundException::class);
         $this->expectExceptionMessage(sprintf('File "%s" not found', $this->dirpath));
@@ -305,21 +305,9 @@ final class FileTest extends TestCase
         $Dir->files();
     }
 
-    public function testFilesInvalidArgumentException()
-    {
-        $File = new File($this->path);
-        mkdir($this->dirpath);
-        file_put_contents($this->path, 'test');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('This file is not a directory.');
-
-        $File->files();
-    }
-
     public function testFiles()
     {
-        $UnitDir = new File(__DIR__);
+        $UnitDir = new Directory(__DIR__);
 
         $this->assertTrue($UnitDir->isDir());
 
@@ -331,7 +319,7 @@ final class FileTest extends TestCase
 
     public function testFilesMatch()
     {
-        $UnitDir = new File(__DIR__);
+        $UnitDir = new Directory(__DIR__);
 
         $OptionTestFiles = $UnitDir->filesMatch(function ($File) {
             return preg_match('/\AOption/', $File->getFilename()) === 1;
@@ -460,14 +448,14 @@ final class FileTest extends TestCase
     {
         mkdir($this->dirpath);
         $info = pathinfo($this->dirpath);
-        $Dir = new File($this->dirpath);
+        $Dir = new Directory($this->dirpath);
  
         $this->assertEquals($info, $Dir->info());
     }
 
     public function testIsDir()
     {
-        $Dir = new File($this->dirpath);
+        $Dir = new Directory($this->dirpath);
 
         $this->assertTrue($Dir->isDir());
 
@@ -492,7 +480,7 @@ final class FileTest extends TestCase
 
     public function testLinesFailsIsDirectory()
     {
-        $Dir = new File($this->dirpath);
+        $Dir = new Directory($this->dirpath);
         mkdir($this->dirpath);
 
         $this->assertTrue($Dir->isDir());
@@ -581,7 +569,7 @@ final class FileTest extends TestCase
     public function tearDown(): void
     {
         if (file_exists($this->dirpath)) {
-            $Dir = new File($this->dirpath);
+            $Dir = new Directory($this->dirpath);
             $Dir->delete(true);
         }
 
