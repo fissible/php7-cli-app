@@ -3,7 +3,7 @@
 namespace PhpCli\Database;
 
 use PhpCli\Collection;
-use PhpCli\Database\Driver as DatabaseDriver;
+use PhpCli\Database\Drivers\Driver as DatabaseDriver;
 use PhpCli\Database\Grammar\Join;
 use PhpCli\Exceptions\QueryException;
 use PhpCli\Traits\Database\Where;

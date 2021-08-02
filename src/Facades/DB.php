@@ -2,7 +2,7 @@
 
 namespace PhpCli\Facades;
 
-use PhpCli\Database\Driver;
+use PhpCli\Database\Drivers\Driver;
 use PhpCli\Database\Query;
 use PhpCli\Traits\RequiresServiceContainer;
 
