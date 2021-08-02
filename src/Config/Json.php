@@ -33,19 +33,6 @@ class Json extends File implements Config
         }
         
         if (false !== strpos($name, '.')) {
-            // $keys = explode('.', $name);
-            // $data = $this->data;
-
-            // foreach ($keys as $key) {
-            //     if (isset($data->$key)) {
-            //         $data = $data->$key;
-            //     } else {
-            //         $data = null;
-            //     }
-            // }
-
-            // return $data;
-
             return array_reduce(explode('.', $name), function ($previous, $current) {
                 return is_numeric($current) ? ($previous[$current] ?? null) : ($previous->$current ?? null); 
             }, $this->data);
@@ -85,29 +72,6 @@ class Json extends File implements Config
 
         return isset($this->data->$name);
     }
-
-    // public function persist(string $path = null)
-    // {
-    //     throw new \Exception('DEPRECATE? REFACTOR?');
-    //     if ($path) {
-    //         if ($this->path !== $path) {
-    //             throw new \InvalidArgumentException(sprintf('Config file already set to path "%s"', $this->path));
-    //         }
-    //         $this->setFile($path);
-    //         if ($this->exists()) {
-    //             $this->loadData();
-    //         }
-    //     }
-
-    //     $contents = json_encode($this->data, JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR, 256);
-    //     $bytes = $this->write($contents);
-
-    //     if ($this->exists()) {
-    //         $this->loadData();
-    //     }
-
-    //     return $bytes;
-    // }
 
     public function set(string $name, $value): self
     {
@@ -242,19 +206,20 @@ class Json extends File implements Config
      * @params Pointer $Pointer
      * @return mixed
      */
-    private function getPointerValue(Pointer $Pointer, array $data = [])
+    private function getPointerValue(Pointer $Pointer, \stdClass $data = null)
     {
         $value = null;
-        if (empty($data)) {
-            $data = $this->data ?? [];
-        }
-                
+
         if ($Pointer->isFile()) {
             // Get the current value from the referenced file
             $Config = $this->resolveRefConfigFile($Pointer);
             $value = $Config->get($Pointer->getReference());
         } else {
-            $value = Arr::get($data, ltrim($Pointer->reference, '#'), '/', function ($key) {
+            if (is_null($data)) {
+                $data = $this->data ?? new \stdClass;
+            }
+
+            $value = Arr::get(Arr::fromObject($data), ltrim($Pointer->reference, '#'), '/', function ($key) {
                 return Pointer::unescapePropertyName($key);
             });
         }
@@ -292,7 +257,7 @@ class Json extends File implements Config
             $i++;
 
             // Temporarily cast \stdClass to array
-            $data = Arr::fromObject($data);
+            $array = Arr::fromObject($data);
             
             // get the pointer, replace key with resolved data
             foreach ($pointers as $keys) {
@@ -300,7 +265,7 @@ class Json extends File implements Config
                 $reference = '/'.implode('/', $keys);
 
                 // Get the reference
-                if (!$pointer = Arr::get($data, $reference, '/', $sanitizeKey)) {
+                if (!$pointer = Arr::get($array, $reference, '/', $sanitizeKey)) {
                     throw new JsonPointerResolutionException($reference);
                 }
 
@@ -311,13 +276,13 @@ class Json extends File implements Config
                 $value = $this->getPointerValue($Pointer, $data);
 
                 // Replace the reference with the resolved value
-                if (!Arr::set($data, $reference, $value, '/', false, $sanitizeKey)) {
+                if (!Arr::set($array, $reference, $value, '/', false, $sanitizeKey)) {
                     throw new JsonPointerResolutionException($reference);
                 }
             }
 
-            // Revert $data array to \stdClass
-            $data = Arr::toObject($data);
+            // Revert $array to \stdClass
+            $data = Arr::toObject($array);
         }
 
         if ($i > $recurseLimit) {
