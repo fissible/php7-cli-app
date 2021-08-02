@@ -94,4 +94,12 @@ trait HasConfig
             throw new \Exception('Configuration not set.');
         }
     }
+
+    public function __get($name)
+    {
+        if ($name === 'config') {
+            return $this->Config;
+        }
+        throw new \Exception(sprintf("%s: unknown property", $name));
+    }
 }

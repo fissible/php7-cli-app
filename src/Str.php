@@ -130,7 +130,7 @@ class Str
      */
     public static function contains($subject, $substring): bool
     {
-        return strpos($subject, $substring) !== false;
+        return mb_strpos($subject, $substring) !== false;
     }
 
     public static function endsWith($subject, $substring): bool
@@ -321,6 +321,7 @@ class Str
      */
     public static function _length($input)
     {
+        $input = preg_replace('#\\x1b[[][^A-Za-z]*[A-Za-z]#', '', $input);
         return mb_strlen($input);
     }
 

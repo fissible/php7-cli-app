@@ -25,7 +25,8 @@
     "minimum-stability": "dev",
     "require": {
         "nesbot/carbon": "^2.0@dev",
-        "seld/cli-prompt": "^1.0@dev"
+        "seld/cli-prompt": "^1.0@dev",
+        "php-ds/php-ds": "dev-master"
     },
     "scripts": {
         "phpunit": "vendor/phpunit/phpunit/phpunit"

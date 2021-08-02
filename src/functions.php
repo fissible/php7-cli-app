@@ -427,36 +427,74 @@ if (! function_exists('config')) {
 //     return Worklog\Database\Connection::getInstance(config('database.'.getenv('DATABASE_DRIVER')));
 // }
 
-function mb_str_pad($str, $pad_len, $pad_str = ' ', $dir = STR_PAD_RIGHT)
-{
-    $str_len = mb_strlen($str);
-    $pad_str_len = mb_strlen($pad_str);
-    if (!$str_len && ($dir == STR_PAD_RIGHT || $dir == STR_PAD_LEFT)) {
-        $str_len = 1; // @debug
-    }
-    if (!$pad_len || !$pad_str_len || $pad_len <= $str_len) {
-        return $str;
-    }
-
-    $result = null;
-    if ($dir == STR_PAD_BOTH) {
-        $length = ($pad_len - $str_len) / 2;
-        $repeat = ceil($length / $pad_str_len);
-        $result = mb_substr(str_repeat($pad_str, $repeat), 0, floor($length))
-            . $str
-            . mb_substr(str_repeat($pad_str, $repeat), 0, ceil($length));
-    } else {
-        $repeat = ceil($str_len - $pad_str_len + $pad_len);
-        if ($dir == STR_PAD_RIGHT) {
-            $result = $str . str_repeat($pad_str, $repeat);
-            $result = mb_substr($result, 0, $pad_len);
-        } elseif ($dir == STR_PAD_LEFT) {
-            $result = str_repeat($pad_str, $repeat);
-            $result = mb_substr($result, 0,
-                    $pad_len - (($str_len - $pad_str_len) + $pad_str_len))
-                . $str;
+if (!function_exists('mb_str_pad')) {
+    function mb_str_pad($str, $pad_len, $pad_str = ' ', $dir = STR_PAD_RIGHT)
+    {
+        $str_len = mb_strlen($str);
+        $pad_str_len = mb_strlen($pad_str);
+        if (!$str_len && ($dir == STR_PAD_RIGHT || $dir == STR_PAD_LEFT)) {
+            $str_len = 1; // @debug
         }
-    }
+        if (!$pad_len || !$pad_str_len || $pad_len <= $str_len) {
+            return $str;
+        }
 
-    return $result;
+        $result = null;
+        if ($dir == STR_PAD_BOTH) {
+            $length = ($pad_len - $str_len) / 2;
+            $repeat = ceil($length / $pad_str_len);
+            $result = mb_substr(str_repeat($pad_str, $repeat), 0, floor($length))
+                . $str
+                . mb_substr(str_repeat($pad_str, $repeat), 0, ceil($length));
+        } else {
+            $repeat = ceil($str_len - $pad_str_len + $pad_len);
+            if ($dir == STR_PAD_RIGHT) {
+                $result = $str . str_repeat($pad_str, $repeat);
+                $result = mb_substr($result, 0, $pad_len);
+            } elseif ($dir == STR_PAD_LEFT) {
+                $result = str_repeat($pad_str, $repeat);
+                $result = mb_substr($result, 0,
+                        $pad_len - (($str_len - $pad_str_len) + $pad_str_len))
+                    . $str;
+            }
+        }
+
+        return $result;
+    }
+}
+
+if (!function_exists('mb_replace')) {
+    function mb_replace($search, $replace, $subject, &$count = 0)
+    {
+        if (!is_array($search) && is_array($replace)) {
+            return false;
+        }
+        if (is_array($subject)) {
+            // call mb_replace for each single string in $subject
+            foreach ($subject as &$string) {
+                $string = &mb_replace($search, $replace, $string, $c);
+                $count += $c;
+            }
+        } elseif (is_array($search)) {
+            if (!is_array($replace)) {
+                foreach ($search as &$string) {
+                    $subject = mb_replace($string, $replace, $subject, $c);
+                    $count += $c;
+                }
+            } else {
+                $n = max(count($search), count($replace));
+                while ($n--) {
+                    $subject = mb_replace(current($search), current($replace), $subject, $c);
+                    $count += $c;
+                    next($search);
+                    next($replace);
+                }
+            }
+        } else {
+            $parts = mb_split(preg_quote($search), $subject);
+            $count = count($parts) - 1;
+            $subject = implode($replace, $parts);
+        }
+        return $subject;
+    }
 }

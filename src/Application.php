@@ -14,6 +14,7 @@ use PhpCli\Filesystem\File;
 use PhpCli\Reporting\Logger;
 use PhpCli\Traits\HasConfig;
 use PhpCli\Traits\RequiresBinary;
+use PhpCli\Traits\SystemInterface;
 
 /**
  * Application class
@@ -29,7 +30,7 @@ use PhpCli\Traits\RequiresBinary;
  */
 class Application
 {
-    use RequiresBinary, HasConfig;
+    use RequiresBinary, HasConfig, SystemInterface;
 
     /**
      * Relative to executable; `pwd`/$configFile.
@@ -128,9 +129,9 @@ class Application
     public function clear()
     {
         if ($this->screen) {
-            system('tput clear');
+            Output::tput('clear');
         } else {
-            system('clear');
+            self::system('clear');
         }
     }
 
@@ -142,7 +143,7 @@ class Application
     public function screen()
     {
         $this->screen = true;
-        system('tput smcup');
+        Output::tput('smcup');
     }
 
     /**
@@ -938,7 +939,7 @@ class Application
         $file = tmpfile();
         fwrite($file, $content);
         $path = stream_get_meta_data($file)['uri'];
-        system($binary. ' '.$path." > `tty`");
+        self::system($binary. ' '.$path." > `tty`");
         $content = rtrim(file_get_contents($path), "\n");
         fclose($file);
 
@@ -1025,7 +1026,7 @@ class Application
     public function __destruct()
     {
         if ($this->screen) {
-            system('tput rmcup');
+            Output::tput('rmcup');
         }
     }
 }

@@ -178,7 +178,7 @@ use PhpCli\Cursor as Cursor;
 
 pcntl_async_signals(true);
 pcntl_signal(SIGINT, 'quit');
-pcntl_signal(SIGINT, 'quit');
+pcntl_signal(SIGTERM, 'quit');
 register_shutdown_function('cleanup');
 set_error_handler(function (\$errno, \$errstr, \$errfile, \$errline) {
     if (0 === error_reporting()) {
@@ -195,6 +195,8 @@ function cleanup()
     if (isset(\$app->screen) && \$app->screen !== false) {
         system('tput rmcup');
     }
+
+    PhpCli\stty::reset();
 
     if (!is_null(\$error)) {
         print \$error."\\n";

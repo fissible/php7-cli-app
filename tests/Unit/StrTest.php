@@ -90,6 +90,25 @@ class StrTest extends TestCase {
         $this->assertFalse(Str::isQuoted("'the string"));
     }
 
+    public function testLength()
+    {
+        $string = '123';
+
+        $this->assertEquals(3, Str::length($string));
+
+        $string = '¹²³';
+
+        $this->assertEquals(3, Str::length($string));
+
+        $string = \PhpCli\Output::color('123', 'red');
+
+        $this->assertEquals(3, Str::length($string));
+
+        $string = \PhpCli\Output::color('¹²³', 'red');
+
+        $this->assertEquals(3, Str::length($string));
+    }
+
     public function testPrune()
     {
         $expected = 'Treebeard';

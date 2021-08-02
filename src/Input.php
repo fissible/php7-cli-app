@@ -84,7 +84,7 @@ class Input
                     $ruleName = 'input.'.$ruleName;
                 }
                 return $ruleName;
-            }, array_flip($messages)));
+            }, array_flip((array) $messages)));
         }
 
         return new Validator(['input' => $rules], $messages);

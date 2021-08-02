@@ -4,7 +4,9 @@ namespace PhpCli;
 
 class Arr
 {
-
+    /**
+     * Convert an object to an associative array.
+     */
     public static function fromObject($object): array
     {
         if (!is_object($object)) throw new \InvalidArgumentException();
@@ -45,7 +47,12 @@ class Arr
      */
     public static function isAssociative(array $array): bool
     {
-        return !static::isIndexed($array);
+        foreach ($array as $key => $_) {
+            if (!is_string($key)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -60,7 +67,31 @@ class Arr
     public static function isIndexed(array $array): bool
     {
         foreach ($array as $key => $_) {
-            if (!filter_var($key, FILTER_VALIDATE_INT)) {
+            if (false === filter_var($key, FILTER_VALIDATE_INT)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Check if the array is an indexed array, eg.
+     * [
+     *    'val', 'ue', 'test' => 'this'
+     * ]
+     * 
+     * @param array $array
+     * @return bool
+     */
+    public static function isMixed(array $array): bool
+    {
+        return !static::isIndexed($array) && !static::isAssociative($array);
+    }
+
+    public static function isNested(array $array): bool
+    {
+        foreach ($array as $key => $value) {
+            if (!is_array($value)) {
                 return false;
             }
         }

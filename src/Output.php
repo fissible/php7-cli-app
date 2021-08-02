@@ -3,10 +3,11 @@
 namespace PhpCli;
 
 use PhpCli\Traits\RequiresBinary;
+use PhpCli\Traits\SystemInterface;
 
 class Output
 {
-    use RequiresBinary;
+    use RequiresBinary, SystemInterface;
 
     protected static $allow_unicode;
 
@@ -42,7 +43,7 @@ class Output
         'yellow' => '1;43',
         'blue' => '44',
         'light_blue' => '1;44',
-        'magenta' => '45',
+        'purple' => '45',
         'light_purple' => '1;45',
         'cyan' => '46',
         'light_cyan' => '1;46',
@@ -95,6 +96,7 @@ class Output
             'cross' => '╬'
         ]
     ];
+
     private Buffer $buffer;
 
     public function __construct()
@@ -120,11 +122,10 @@ class Output
      */
     public static function clearLine(int $moveUp = 0)
     {
-        self::requireBinary('tput');
         if ($moveUp) {
             Cursor::moveUp($moveUp);
         }
-        return system('tput el');
+        return self::tput('el');
     }
 
     public static function color($input, $color, $background_color = false): string
@@ -232,6 +233,38 @@ class Output
     }
 
     /**
+     * Output an array with row and column index lables.
+     * 
+     * @param array $array
+     * @return void
+     */
+    public static function printIndexedArray(array $array): void
+    {
+        $printedCols = false;
+        $row_width = strlen(count($array) . '') + 1;
+        $col_width = strlen(count($array[0]) . '') + 1;
+
+        print "\n[";
+        foreach ($array as $y => $row) {
+            if (!$printedCols) {
+                print "    ";
+                foreach ($row as $x => $char) {
+                    print substr(str_pad($x . '', $col_width, ' ', STR_PAD_RIGHT), 0, $col_width);
+                }
+                $printedCols = true;
+            }
+
+            print "\n  " . str_pad($y . '', $row_width, ' ', STR_PAD_RIGHT);
+            foreach ($row as $x => $char) {
+                print $char . "  ";
+            }
+            print ',';
+        }
+        print "\n]";
+
+    }
+
+    /**
      * $output->printl('string');
      * "string\n"
      */
@@ -269,8 +302,6 @@ class Output
     public static function cols()
     {
         return static::rtput('cols');
-        self::requireBinary('tput');
-        return exec('tput cols');
     }
 
     /**
@@ -279,13 +310,11 @@ class Output
     public static function rows()
     {
         return static::rtput('lines');
-        self::requireBinary('tput');
-        return exec('tput lines');
     }
 
     public static function allow_unicode()
     {
-        return static::$allow_unicode;
+        return static::$allow_unicode ?? null;
     }
 
     public static function line_joint($flags, $variant = null)
@@ -294,7 +323,7 @@ class Output
         if (is_null($variant)) {
             $variant = static::variant();
         }
-        if (static::$allow_unicode) {
+        if (static::allow_unicode()) {
             if (!is_array($flags)) {
                 $flags = explode(',', $flags);
             }
@@ -384,6 +413,26 @@ class Output
         return $length;
     }
 
+    /**
+     * Execute a tput command.
+     * Capture result to an array and return it.
+     */
+    public static function rtput(string $command): array
+    {
+        self::requireBinary('tput');
+        return self::exec('tput', $command);
+    }
+
+    /**
+     * Execute a tput command.
+     * Returns the last line of the command output on success, and false on failure.
+     */
+    public static function tput($command): string
+    {
+        self::requireBinary('tput');
+        return self::system('tput', $command);
+    }
+
     public static function uchar($char, $variant = null, $override_allow_unicode = false)
     {
         $out = $char;
@@ -427,18 +476,6 @@ class Output
      */
     public static function variant(): string
     {
-        return static::$variant;
-    }
-    
-    private static function rtput($command)
-    {
-        self::requireBinary('tput');
-        return exec(sprintf('tput %s', $command));
-    }
-
-    private static function tput($command)
-    {
-        self::requireBinary('tput');
-        return system(sprintf('tput %s', $command));
+        return static::$variant ?? 'light';
     }
 }
