@@ -3,10 +3,11 @@
 namespace PhpCli;
 
 use PhpCli\Traits\RequiresBinary;
+use PhpCli\Traits\SystemInterface;
 
 class Cursor
 {
-    use RequiresBinary;
+    use RequiresBinary, SystemInterface;
 
     public static function hide()
     {
@@ -38,9 +39,16 @@ class Cursor
         static::tput(sprintf('cuu %d', $distance));
     }
 
-    public static function put(int $y, int $x)
+    public static function put(int $y, int $x, string $string = null)
     {
-        static::tput(sprintf('cup %d %d', $y, $x));
+        if ($string !== null) {
+            // printf '\e[%d;%dH' 6 9
+            // static::shell_exec(sprintf('printf \'\\e[%%d;%%d%s\' %d %d', $string, $y + 1, $x + 1));
+            static::shell_exec(sprintf('tput cup %d %d', $y, $x));
+            echo $string;
+        } else {
+            static::tput(sprintf('cup %d %d', $y, $x));
+        }
     }
 
     public static function restore()

@@ -2,7 +2,9 @@
 
 namespace PhpCli\UI;
 
-use Ds\Stack;
+use PhpCli\Arr;
+use PhpCli\Buffer;
+use PhpCli\Interfaces\Config;
 use PhpCli\Collection;
 use PhpCli\Grid;
 use PhpCli\Filesystem\File;
@@ -36,12 +38,14 @@ class View
 
     private Grid $view;
 
-    public function __construct(array $data = [], File $File = null, array $config = [])
+    public function __construct(array $data = [], File $File = null, $config = null)
     {
         $this->data = $data;
 
-        if (!empty($config)) {
-            $this->defaults = array_merge($this->defaults, $config);
+        if ($config instanceof \stdClass) {
+            $this->defaults = array_merge($this->defaults, Arr::fromObject($config));
+        } elseif ($config instanceof Config) {
+            $this->setConfig($config);
         }
 
         if ($File) {
@@ -57,6 +61,11 @@ class View
     public function data(): array
     {
         return $this->data;
+    }
+
+    public function File(): File
+    {
+        return $this->File;
     }
 
     /**
@@ -125,9 +134,47 @@ class View
         return $lines;
     }
 
+    /**
+     * Get the specified Component.
+     * 
+     * @param string $name
+     * @return Component|null
+     */
+    public function getComponent(string $name): ?Component
+    {
+        if ($this->hasComponent($name)) {
+            return $this->Components->get($name);
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if the specified Component exists.
+     * 
+     * @param string $name
+     * @return bool
+     */
     public function hasComponent(string $name): bool
     {
-        return isset($this->data[$name]);
+        if (isset($this->Components)) {
+            return $this->Components->has($name);
+        }
+        
+        return false;
+    }
+
+    /**
+     * Add a Component to the View.
+     * 
+     * @param string $name
+     * @param Component $Component
+     */
+    public function setComponent(Component $Component): self
+    {
+        $this->Components->set($Component->name, $Component);
+
+        return $this;
     }
 
     /**
@@ -145,52 +192,78 @@ class View
         return $this;
     }
 
-    private function replaceComponents(array $lines)
+    private function replaceComponents()
     {
-        $this->Components->each(function (Component $Component) use (&$lines) {
-            $x = $Component->x;
-            foreach ($Component->render() as $contentIndex => $content) {
-                $y = $Component->y + $contentIndex + 1;
+        $variant = $this->borderVariant();
+        $borderChars = [
+            'hor' => Output::uchar('hor', $variant),
+            'ver' => Output::uchar('ver', $variant),
+            'down_right' => Output::uchar('down_right', $variant),
+            'down_left' => Output::uchar('down_left', $variant),
+            'up_right' => Output::uchar('up_right', $variant),
+            'up_left' => Output::uchar('up_left', $variant),
+            'ver_right' => Output::uchar('ver_right', $variant),
+            'ver_left' => Output::uchar('ver_left', $variant),
+            'down_hor' => Output::uchar('down_hor', $variant),
+            'up_hor' => Output::uchar('up_hor', $variant),
+            'cross' => Output::uchar('cross', $variant)
+        ];
 
-                if (!isset($lines[$y])) {
-                    throw new \RangeException(sprintf('%d: row offset does not exist in the File lines', $y));
-                }
+        $this->Components->each(function (Component $Component) use ($variant, $borderChars) {
 
-                $line = &$lines[$y];
-
-                if (mb_strlen($line) <= $x) {
-                    throw new \RangeException(sprintf('%d: column offset does not exist in File line', $x));
-                }
-                
-                if ($contentIndex === 0) {
-                    $search = '#' . $Component->name;
-
-                    $pos = mb_strpos($line, $search);
-                    if ($pos !== false) {
-                        $line = mb_replace($search, str_repeat(' ', strlen($search)), $line);
+            // Erase the Component ID string
+            $componentId = '#'.$Component->name;
+            if ($coords = $this->view->find($componentId)) {
+                $chars = Str::split($componentId);
+                foreach ($chars as $x => $char) {
+                    if ($this->view->valid($coords[0], $coords[1] + $x)) {
+                        $this->view->set($coords[0], $coords[1] + $x, ' ');
                     }
                 }
+            }
 
-                $content_length = Str::length($content);
-                $line_length = mb_strlen($line);
-                $pos = $x + 1;
-                $line = mb_substr($line, 0, $pos) . $content . mb_substr($line, $content_length + $pos, $line_length - $content_length + $pos);
+            // Map the content into the view
+            $borders = $Component->getBorder();
+            $padding = $Component->getPadding();
+            $vpadding = $Component->getVerticalPadding();
+            $lines = $Component->render(true);
+
+            foreach ($lines as $y => $line) {
+                $chars = Str::split($line);
+                
+                foreach ($chars as $x => $char) {
+                    $newY = $Component->y + $y;
+                    $newX = $Component->x + $x;
+
+                    if ($this->view->valid($newY, $newX)) {
+                        // check for intersecting borders
+                        if (in_array($char, array_values($borderChars))) {
+                            $currChar = $this->view->get($newY, $newX);
+                            if (in_array($currChar, array_values($borderChars))) {
+                                $char = Output::combine_lines($currChar, $char, $variant);
+                            }
+                        }
+
+                        $this->view->set($newY, $newX, $char);
+                    } else {
+                        throw new \Exception(sprintf('y: %d x: %d, invalid coordinates', $newY, $newX));
+                    }
+                }
             }
         });
 
-        return $lines;
+        // return $lines;
     }
 
     /**
      * Scan the template files lines for occurences of configured data
      * variables and replace them with their values.
      * 
-     * @param array $lines
      * @return array
      */
-    private function replaceVariables(array $lines)
+    private function replaceVariables()
     {
-        foreach ($this->variables as $key) {
+        foreach ($this->variables as $key => $coords) {
             if (!isset($this->data[$key])) {
                 continue;
             }
@@ -205,17 +278,20 @@ class View
                 }
             }
 
-            $lines = array_map(function ($line) use ($key, $value) {
-                if (Str::contains($line, $key)) {
-                    $search = str_pad('$' . $key, strlen($value));
-                    $value = str_pad($value, strlen($search));
-                    return mb_replace($search, $value, $line);
+            // Replace the "$variable" string with the value in the view
+            $lines = explode("\n", $value);
+            foreach ($lines as $y => $line) {
+                $chars = Str::split($line);
+                foreach ($chars as $x => $char) {
+                    if ($char === ' ') $char = null;
+                    if ($this->view->valid($coords[0] + $y, $coords[1] + $x)) {
+                        $this->view->set($coords[0] + $y, $coords[1] + $x, $char);
+                    }
                 }
-                return $line;
-            }, $lines);
+            }
         }
 
-        return $lines;
+        // return $lines;
     }
 
     /**
@@ -224,44 +300,28 @@ class View
      * 
      * @return array
      */
-    public function render(): array
+    public function render()
     {
-        $variant = $this->borderVariant();
-        $borderChar = Output::uchar('ver', $variant, true);
+        // blank out all content
+        $this->view = Grid::create($this->view->width(), $this->view->height());
 
-        $lines = $this->getLines();
-        $lines = $this->replaceComponents($lines);
-        $lines = $this->replaceVariables($lines);
+        $this->replaceComponents();
+        $this->replaceVariables();
 
         // color the borders
         if ($this->Config->has('border-color')) {
-            $topLeft = Output::uchar('down_right', $variant, true);
-            $midLeft = Output::uchar('ver_right', $variant, true);
-            $botLeft = Output::uchar('up_right', $variant, true);
 
-            foreach ($lines as $y => $line) {
-                $char = mb_substr($line, 0, 1) ?? null;
-
-                switch ($char) {
-                    case $topLeft:
-                    case $midLeft:
-                    case $botLeft:
-                        $lines[$y] = Output::color($line, $this->Config->get('border-color'));
-                        break;
-                    case $borderChar:
-                        $borderCharColor = Output::color($borderChar, $this->Config->get('border-color'));
-                        $lines[$y] = mb_replace($borderChar, $borderCharColor, $line);
-                        break;
+            $unicodeBorderChars = [
+                'hor', 'ver', 'down_right', 'down_left', 'up_right', 'up_left', 'ver_right', 'ver_left', 'down_hor', 'up_hor', 'cross'
+            ];
+            foreach ($unicodeBorderChars as $char) {
+                while ($coords = $this->view->find($char)) {
+                    $this->view->set($coords[0], $coords[1], Output::color($char, $this->Config->get('border-color')));
                 }
             }
         }
 
-        // Color the component contents
-        $this->Components->each(function (Component $Component) use (&$lines) {
-            $lines = $Component->colorizeContent($lines);
-        });
-
-        return $lines;
+        return $this->view;
     }
 
 
@@ -291,6 +351,11 @@ class View
         preg_match_all($pattern, $string, $variables);
 
         return $variables[1] ?? [];
+    }
+
+    private function getVariableCoords(string $name): array
+    {
+        return $this->view->find('$' . $name);
     }
 
     /**
@@ -388,11 +453,18 @@ class View
         $grid = [];
 
         foreach ($lines as $row) {
-            $grid[] = mb_str_split($row);
+            $grid[] = array_map(function ($char) {
+                if ($char === ' ') return null;
+                return $char;
+            }, Str::split($row));
         }
 
         $this->view = new Grid($grid);
-        $this->variables = static::getVariableNames($string);
+        $this->variables = [];
+        $variables = static::getVariableNames($string);
+        foreach ($variables as $name) {
+            $this->variables[$name] = $this->getVariableCoords($name);
+        }
 
         foreach (static::getComponentNames($string) as $componentId) {
             [$startCoords, $stopCoords] = $this->getBoundingBox($componentId);
@@ -405,11 +477,31 @@ class View
 
             if (isset($this->data[$componentId])) {
                 $Component->setContent($this->data[$componentId]);
+            } elseif ($componentId === 'cursor') {
+                $Component->setContent('');
             }
 
-            $this->Components->set($name, $Component);
+            $this->setComponent($Component);
         }
 
         return $this;
+    }
+
+    public function __get($name)
+    {
+        if ($name === 'config') {
+            return $this->Config;
+        }
+
+        if (isset($this->data[$name])) {
+            return $this->data[$name];
+        }
+
+        throw new \Exception(sprintf("%s: unknown property", $name));
+    }
+
+    public function __set($name, $value)
+    {
+        $this->data[$name] = $value;
     }
 }

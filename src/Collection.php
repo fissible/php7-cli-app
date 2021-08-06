@@ -116,7 +116,7 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
 
     public function get($key, $default = null)
     {
-        if (isset($this->set[$key])) {
+        if ($this->has($key)) {
             return $this->set[$key];
         }
 
@@ -124,6 +124,11 @@ class Collection implements \IteratorAggregate, \Countable, \JsonSerializable
             return $default($this);
         }
         return $default;
+    }
+
+    public function has($key): bool
+    {
+        return isset($this->set[$key]);
     }
 
     public function isAssociative(): bool

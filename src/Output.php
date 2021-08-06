@@ -9,7 +9,7 @@ class Output
 {
     use RequiresBinary, SystemInterface;
 
-    protected static $allow_unicode;
+    protected static $allow_unicode = true;
 
     protected static $variant;
 
@@ -274,7 +274,7 @@ class Output
         if (isset($this->buffer)) {
             $this->buffer->printl($indentStr . $string);
         } else {
-            $this->print($indentStr . rtrim($string) . "\n");
+            $this->print($indentStr . rtrim($string, "\n\r") . "\n");
         }
     }
 
@@ -353,6 +353,211 @@ class Output
                         $out = static::uchar('up_left', $variant);
                         break;
                 }
+            }
+        }
+
+        return $out;
+    }
+
+    public static function combine_lines($lineA, $lineB, $variant = null)
+    {
+        $out = '+';
+        if (is_null($variant)) {
+            $variant = static::variant();
+        }
+        if (static::allow_unicode()) {
+            switch ($lineA) {
+                case Output::uchar('hor', $variant): // ─
+                    switch ($lineB) {
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('ver_left', $variant): // ┤
+                            return Output::uchar('cross', $variant); // ┼
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('down_left', $variant): // ┐
+                            return Output::uchar('down_hor', $variant); // ┬
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('up_left', $variant): // ┘
+                            return Output::uchar('up_hor', $variant); // ┴
+                        case Output::uchar('hor', $variant): // ─
+                            return $lineA; // ─
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('up_hor', $variant): // ┴
+                            return $lineB;
+                    }
+                    break;
+                case Output::uchar('ver', $variant): // │
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                            return Output::uchar('cross', $variant); // ┼
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                        case Output::uchar('ver', $variant): // │
+                            return $lineA; // │
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('ver_right', $variant): // ├
+                            return Output::uchar('ver_right', $variant); // ├
+                        case Output::uchar('down_left', $variant): // ┐
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('ver_left', $variant): // ┤
+                            return Output::uchar('ver_left', $variant); // ┤
+                    }
+                    break;
+                case Output::uchar('down_right', $variant): // ┌
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('down_left', $variant): // ┐
+                            return Output::uchar('down_hor', $variant); // ┬
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('up_right', $variant): // └
+                            return Output::uchar('ver_right', $variant); // ├
+                        case Output::uchar('down_right', $variant): // ┌
+                            return $lineA; // ┌
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('down_hor', $variant): // ┬
+                            return $lineB;
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('ver_left', $variant): // ┤
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                    }
+                    break;
+                case Output::uchar('down_left', $variant): // ┐
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('down_right', $variant): // ┌
+                            return Output::uchar('down_hor', $variant); // ┬
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('up_left', $variant): // ┘
+                            return Output::uchar('ver_left', $variant); // ┤
+                        case Output::uchar('down_left', $variant): // ┐
+                            return $lineA; // ┐
+                        case Output::uchar('ver_left', $variant): // ┤
+                        case Output::uchar('down_hor', $variant): // ┬
+                            return $lineB;
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                    }
+                    break;
+                case Output::uchar('up_right', $variant): // └
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('up_left', $variant): // ┘
+                            return Output::uchar('up_hor', $variant); // ┴
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('down_right', $variant): // ┌
+                            return Output::uchar('ver_right', $variant); // ├
+                        case Output::uchar('down_left', $variant): // ┐
+                        case Output::uchar('ver_left', $variant): // ┤
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                        case Output::uchar('up_right', $variant): // └
+                            return $lineA; // └
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('up_hor', $variant): // ┴
+                            return $lineB;
+                    }
+                    break;
+                case Output::uchar('up_left', $variant): // ┘
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                            return Output::uchar('up_hor', $variant); // ┴
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('down_left', $variant): // ┐
+                            return Output::uchar('ver_left', $variant); // ┤
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                        case Output::uchar('up_right', $variant): // └
+                            return $lineA; // └
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('ver_left', $variant): // ┤
+                            return $lineB;
+                    }
+                    break;
+                case Output::uchar('ver_right', $variant): // ├
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('down_left', $variant): // ┐
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('ver_left', $variant): // ┤
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('ver_right', $variant): // ├
+                            return $lineA; // ├
+                    }
+                    break;
+                case Output::uchar('ver_left', $variant): // ┤
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                            break;
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('down_left', $variant): // ┐
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('ver_left', $variant): // ┤
+                            return $lineA; // ┤
+                            break;
+                    }
+                    break;
+                case Output::uchar('down_hor', $variant): // ┬
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('down_left', $variant): // ┐
+                        case Output::uchar('down_hor', $variant): // ┬
+                            return $lineA; // ┬
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('ver_left', $variant): // ┤
+                        case Output::uchar('up_hor', $variant): // ┴
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                    }
+                    break;
+                case Output::uchar('up_hor', $variant): // ┴
+                    switch ($lineB) {
+                        case Output::uchar('hor', $variant): // ─
+                        case Output::uchar('up_right', $variant): // └
+                        case Output::uchar('up_left', $variant): // ┘
+                        case Output::uchar('up_hor', $variant): // ┴
+                            return $lineA; // ┴
+                        case Output::uchar('ver', $variant): // │
+                        case Output::uchar('down_right', $variant): // ┌
+                        case Output::uchar('down_left', $variant): // ┐
+                        case Output::uchar('ver_right', $variant): // ├
+                        case Output::uchar('ver_left', $variant): // ┤
+                        case Output::uchar('down_hor', $variant): // ┬
+                        case Output::uchar('cross', $variant): // ┼
+                            return Output::uchar('cross', $variant); // ┼
+                    }
+                    break;
+                case Output::uchar('cross', $variant): // ┼
+                    return $lineA; // ┼
             }
         }
 
@@ -462,7 +667,7 @@ class Output
             }
         }
 
-        if (!static::$allow_unicode && false === $override_allow_unicode) {
+        if (!static::allow_unicode() && false === $override_allow_unicode) {
             $out = static::non_unicode_variant($out, $variant);
         }
 

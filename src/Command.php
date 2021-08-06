@@ -20,6 +20,26 @@ class Command
     {
         return 0;
     }
+    
+    public function __get($name)
+    {
+        if (isset($this->$name)) {
+            return $this->$name;
+        }
+
+        return $this->app()->{$name};
+    }
+
+    public function __set($name, $value)
+    {
+        if (isset($this->$name)) {
+            $this->$name = $value;
+        } else {
+
+        }
+
+        $this->app()->{$name} = $value;
+    }
 
     public function __call($name, $arguments)
     {

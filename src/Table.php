@@ -2,6 +2,8 @@
 
 namespace PhpCli;
 
+use PhpCli\Str;
+
 class Table
 {
     private Buffer $buffer;
@@ -33,9 +35,8 @@ class Table
         'no-data-string' => 'No data'
     ];
 
-    public function __construct(Application $app, array $headers = [], array $rows = [], array $options = [])
+    public function __construct(array $headers = [], array $rows = [], array $options = [])
     {
-        $this->app = $app;
         $this->buffer = new Buffer();
         $this->setHeaders($headers);
         $this->rows = $rows;
@@ -45,6 +46,48 @@ class Table
     public static function borderPreset(string $preset): array
     {
         switch ($preset) {
+            case 'simple':
+                return [
+                    'chars' => [
+                        'top' => '-',
+                        'top-mid' => '+',
+                        'top-left' => '+',
+                        'top-right' => '+',
+                        'bottom' => '-',
+                        'bottom-mid' => '+',
+                        'bottom-left' => '+',
+                        'bottom-right' => '+',
+                        'left' => '|',
+                        'left-mid' => '+',
+                        'mid' => '-',
+                        'mid-mid' => '+',
+                        'right' => '|',
+                        'right-mid' => '+',
+                        'middle' => '|'
+                    ]
+                ];
+                break;
+            case 'plain':
+                return [
+                    'chars' => [
+                        'top' => '',
+                        'top-mid' => '',
+                        'top-left' => '',
+                        'top-right' => '',
+                        'bottom' => '',
+                        'bottom-mid' => '',
+                        'bottom-left' => '',
+                        'bottom-right' => '',
+                        'left' => '',
+                        'left-mid' => '',
+                        'mid' => '─',
+                        'mid-mid' => '┼',
+                        'right' => '',
+                        'right-mid' => '',
+                        'middle' => '│'
+                    ]
+                ];
+                break;
             case 'none':
                 return [
                     'chars' => [
@@ -69,17 +112,7 @@ class Table
         }
     }
 
-    /**
-     * Print the table to the output
-     */
-    public function print(): void
-    {
-        foreach ($this->render() as $key => $line) {
-            $this->app->output->print($line);
-        }
-    }
-
-    public function render()
+    public function render(): array
     {
         $printHeaders = false;
         $cellWidths = [];
@@ -102,7 +135,7 @@ class Table
             $printHeaders = true;
 
             foreach ($this->headers as $x => $header) {
-                $w = strlen($header.'') + 2;
+                $w = Str::length($header.'') + 2;
                 if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
             }
         }
@@ -112,7 +145,7 @@ class Table
         foreach ($this->rows as $y => $row) {
             foreach ($row as $x => $col) {
                 if (isset($cellWidths[$x])) {
-                    $w = strlen((string) $col) + 2;
+                    $w = Str::length((string) $col) + 2;
                     if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
                 }
             }
@@ -143,7 +176,7 @@ class Table
             $this->printChar('left');
             foreach ($headers as $x => $header) {
                 $width = $cellWidths[$x];
-                $this->buffer->print(str_pad(' ' . $header, $width));
+                $this->buffer->print(Str::pad(' ' . $header, $width));
                 if ($x < $lastColIndex) {
                     $this->printChar('middle');
                 }
@@ -182,21 +215,21 @@ class Table
                     }
 
                     if (($this->maskDuplicateRowValues === true || is_array($this->maskDuplicateRowValues) && in_array($x, $this->maskDuplicateRowValues)) && !empty($prev_cell_value)) {
-                        if (isset($row[$x]) && $row[$x] === $prev_cell_value && strlen($cell_value) > 7) {
+                        if (isset($row[$x]) && $row[$x] === $prev_cell_value && Str::length($cell_value) > 7) {
                             $cell_value = trim(substr($cell_value, 0, 5)).'...';
                         }
                     }
 
                     switch ($alignment) {
                         case TableHeader::ALIGN_RIGHT:
-                            $cell_value = str_pad($cell_value.' ', $width, ' ', STR_PAD_LEFT);
+                            $cell_value = Str::pad($cell_value.' ', $width, ' ', STR_PAD_LEFT);
                         break;
                         case TableHeader::ALIGN_CENTER:
-                            $cell_value = str_pad((string) $cell_value, $width, ' ', STR_PAD_BOTH);
+                            $cell_value = Str::pad((string) $cell_value, $width, ' ', STR_PAD_BOTH);
                         break;
                         case TableHeader::ALIGN_LEFT:
                         default:
-                            $cell_value = str_pad(' '.$cell_value, $width, ' ', STR_PAD_RIGHT);
+                            $cell_value = Str::pad(' '.$cell_value, $width, ' ', STR_PAD_RIGHT);
                         break;
                     }
 
@@ -211,7 +244,7 @@ class Table
 
         } else {
             $this->printChar('left');
-            $this->buffer->print(str_pad($this->options['no-data-string'], $innerLength, ' ', STR_PAD_BOTH));
+            $this->buffer->print(Str::pad($this->options['no-data-string'], $innerLength, ' ', STR_PAD_BOTH));
             $this->printChar('right', true);
         }
 
@@ -312,7 +345,7 @@ class Table
             $cellWidths = array_fill(0, $cols, 0);
 
             foreach ($this->headers as $x => $header) {
-                $w = strlen($header.'') + 2;
+                $w = Str::length($header.'') + 2;
                 if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
             }
         }
@@ -320,7 +353,7 @@ class Table
         foreach ($this->rows as $y => $row) {
             foreach ($row as $x => $col) {
                 if (isset($cellWidths[$x])) {
-                    $w = strlen((string) $col) + 2;
+                    $w = Str::length((string) $col) + 2;
                     if ($w > $cellWidths[$x]) $cellWidths[$x] = $w;
                 }
             }

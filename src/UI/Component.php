@@ -53,6 +53,7 @@ class Component
             $formattedLines = $this->getFormattedContentLines();
 
             foreach ($formattedLines as $key => $contentLine) {
+                if (empty($contentLine)) continue;
                 foreach ($lines as $y => $line) {
                     if (Str::contains($line, $contentLine)) {
                         //           mb_replace($search, $replace, $subject, &$count = 0)
@@ -64,6 +65,55 @@ class Component
 
         // return array of ['find' => 'replace'] or just colorize the provided lines array
         return $lines;
+    }
+
+    public function getBorder(): int
+    {
+        $border = 1;
+        if (isset($this->config()->border)) {
+            if (filter_var($this->config()->border, FILTER_VALIDATE_INT|FILTER_VALIDATE_BOOLEAN)) {
+                $border = $this->config()->border ? 1 : 0;
+            } elseif ($this->config()->border === 'none') {
+                $border = 0;
+            }
+        }
+
+        return $border;
+    }
+
+    /**
+     * Get the content coordinates.
+     * 
+     * @return array
+     */
+    public function getContentCoords(string $startStop = 'start')
+    {
+        $borders = $this->getBorder();
+        $padding = $this->getPadding();
+        $vpadding = $this->getVerticalPadding();
+        [$y, $x] = $this->getCoordinates('start');
+
+        $x += $borders;
+        $x += $padding;
+
+        if ($startStop === 'stop') {
+
+            $formattedLines = $this->getFormattedContentLines();
+            $lineCount = count($formattedLines);
+
+            foreach ($formattedLines as $key => $contentLine) {
+                $y++;
+                if ($key === $lineCount) {
+                    $x += Str::length($contentLine);
+                    break;
+                }
+            }
+        } else {
+            $y += $vpadding;
+            $y += $borders;
+        }
+
+        return [$y, $x];
     }
 
     public function getCoordinates(string $startStop = null): array
@@ -97,10 +147,10 @@ class Component
     /**
      * Format the 
      */
-    public function getFormattedContentLines()
+    public function getFormattedContentLines(bool $color = false)
     {
         if (!isset($this->formattedLines)) {
-            $content = $this->content;
+            $content = $this->content ?? '';
             $width = $this->getWidth();
             $height = $this->getHeight();
             $widest = 0;
@@ -116,6 +166,21 @@ class Component
             }
 
             $lines = explode("\n", $content);
+            $lines = array_map(function ($input) {
+                return preg_replace('/\t/', '    ', $input);
+            }, $lines);
+
+            // print_r(array_map(function ($line) {
+            //     return $line.' - ('.strlen($line).'|'.mb_strlen($line).'|'.Str::length($line).')';
+            // }, $lines));
+
+            if (!$color) {
+                $lines = array_map(function ($input) { return preg_replace('#\\x1b[[][^A-Za-z]*[A-Za-z]#', '', $input); }, $lines);
+            }
+
+            // print_r(array_map(function ($line) {
+            //     return $line . ' - (' . strlen($line) . '|' . mb_strlen($line) . '|' . Str::length($line) . ')';
+            // }, $lines));
 
             // Justify the content
             if ($this->config()->has('align')) {
@@ -125,16 +190,20 @@ class Component
                         case 'left':
                             $pad_type = STR_PAD_RIGHT;
                             break;
-                        case    'right':
+                        case 'right':
                             $pad_type = STR_PAD_LEFT;
                             break;
-                        case  'center':
+                        case 'center':
                             $pad_type = STR_PAD_BOTH;
                             break;
                     }
-                    return str_pad($row, $width, ' ', $pad_type);
+                    return Str::pad($row, $width, ' ', $pad_type);
                 }, $lines);
-            }
+            } else {
+                $lines = array_map(function (string $row) use ($width) {
+                    return Str::pad($row, $width);
+                }, $lines);
+            }   
 
             // debug
             // $lines = array_map(function (string $row) {
@@ -149,7 +218,7 @@ class Component
 
             // get the longest row
             foreach ($lines as $row) {
-                if (($len = mb_strlen($row)) > $widest) {
+                if (($len = Str::length($row)) > $widest) {
                     $widest = $len;
                 }
             }
@@ -171,6 +240,21 @@ class Component
         return $this->formattedLines;
     }
 
+    public function getPadding(): int
+    {
+        return intval($this->config()->padding ?? 0);
+    }
+
+    public function getVerticalPadding(): int
+    {
+        $vpadding = 0;
+        if ($padding = $this->getPadding()) {
+            $vpadding = intval($padding / 2);
+        }
+
+        return $vpadding;
+    }
+
     /**
      * Get the Component (scroll) offset.
      * 
@@ -190,41 +274,79 @@ class Component
         throw new \InvalidArgumentException('Offset key must be "x" or "y".');
     }
 
-    public function render(): array
+    public function name(): string
     {
+        return $this->name;
+    }
+
+    public function render(bool $colorize = false): array
+    {
+        $border = $this->getBorder();
         $padding = $this->getPadding();
         $vpadding = $this->getVerticalPadding();
+        $height = $this->getHeight();
+        $width = $this->getWidth();
         $pad = str_repeat(' ', $padding);
-        
+
         // Convert content string into array of strings
-        $lines = $this->getFormattedContentLines();
+        $lines = $this->getFormattedContentLines($colorize);
 
         // add horizontal padding to each row
         $lines = array_map(function (string $row) use ($pad) {
             return $pad . $row . $pad;
         }, $lines);
 
-        // print "\n" . $this->name . " + lines[] 4:\n";
-        // var_export($lines);
-
         // add vertical padding to rows
         if ($vpadding > 0) {
             // add padding rows: rows of spaces equal to longest row
             for ($p = 0; $p < $vpadding; $p++) {
-                array_unshift($lines, str_repeat(' ', $this->width));
-                array_push($lines, str_repeat(' ', $this->width));
+                array_unshift($lines, '');
+                array_push($lines, '');
             }
+        }
+
+        // colorize content
+        if ($colorize) {
+            foreach ($lines as $key => $contentLine) {
+                if (empty($contentLine)) continue;
+                $lines[$key] = Output::color($contentLine, $this->config()->color);
+            }
+        }
+
+        if ($border) {
+            $borderStyle = $this->config()->get('border-style');
+            $verticalBorder = Output::uchar('ver', $borderStyle);
+
+            $topBorder = Output::uchar('down_right', $borderStyle);
+            $topBorder .= str_repeat(Output::uchar('hor', $borderStyle), $this->width - ($border * 2));
+            $topBorder .= Output::uchar('down_left', $borderStyle);
+
+            array_unshift($lines, $topBorder);
+
+            for ($i = 1; $i <= $height; $i++) {
+                if (isset($lines[$i])) {
+                    $lines[$i] = $verticalBorder . $lines[$i] . $verticalBorder;
+                } else {
+                    $lines[] = $verticalBorder . str_repeat(' ', $width + ($padding * 2)) . $verticalBorder;
+                }
+            }
+
+            $bottomBorder = Output::uchar('up_right', $borderStyle);
+            $bottomBorder .= str_repeat(Output::uchar('hor', $borderStyle), $this->width - ($border * 2));
+            $bottomBorder .= Output::uchar('up_left', $borderStyle);
+            array_push($lines, $bottomBorder);
         }
 
         return $lines;
     }
 
-    public function setContent($content)
+    public function setContent($content = '')
     {
         if (!is_string($content) && !($content instanceof Component)) {
-            throw new \InvalidArgumentException('Component content must be a string or a Component instance, "%s" given.', gettype($content));
+            throw new \InvalidArgumentException(sprintf('Component content must be a string or a Component instance, "%s" given.', gettype($content)));
         }
 
+        $this->formattedLines = null;
         $this->content = $content;
     }
 
@@ -272,51 +394,34 @@ class Component
 
     private function getStyles(Config $viewConfig): \stdClass
     {
-        $config = Arr::toObject($this->defaults);
         $thisStylesKey = sprintf('styles.%s', $this->name);
 
         if ($viewConfig->has($thisStylesKey)) {
-            $config = (object) array_merge((array) $config, (array) $viewConfig->get($thisStylesKey));
+            $config = $viewConfig->get($thisStylesKey);
+        } else {
+            $config = Arr::toObject($this->defaults);
+        }
 
-            if (!isset($config->padding) && $viewConfig->has('padding')) {
-                $config->padding = intval($viewConfig->get('padding'));
-            }
+        foreach ($viewConfig->getData() as $key => $value) {
+            if ($key === 'styles') continue;
+            $config->$key = $value;
+        }
 
-            if (!isset($config->border) && $viewConfig->has('border')) {
-                $config->border = $viewConfig->border;
+        foreach ($this->defaults as $key => $value) {
+            if (!isset($config->$key)) {
+                $config->$key = $value;
             }
+        }
+
+        if (!isset($config->padding) && $viewConfig->has('padding')) {
+            $config->padding = intval($viewConfig->get('padding'));
+        }
+
+        if (!isset($config->border) && $viewConfig->has('border')) {
+            $config->border = $viewConfig->border;
         }
 
         return $config;
-    }
-
-    private function getBorder(): int
-    {
-        $border = 1;
-        if (isset($this->config()->border)) {
-            if (filter_var($this->config()->border, FILTER_VALIDATE_INT|FILTER_VALIDATE_BOOLEAN)) {
-                $border = $this->config()->border ? 1 : 0;
-            } elseif ($this->config()->border === 'none') {
-                $border = 0;
-            }
-        }
-
-        return $border;
-    }
-
-    private function getPadding(): int
-    {
-        return intval($this->config()->padding ?? 0);
-    }
-
-    private function getVerticalPadding(): int
-    {
-        $vpadding = 0;
-        if ($padding = $this->getPadding()) {
-            $vpadding = intval($padding / 2);
-        }
-
-        return $vpadding;
     }
 
     private function getHeight(): int
@@ -334,7 +439,8 @@ class Component
         $width = $this->width;
         $padding = $this->getPadding();
         $borders = $this->getBorder();
-        $width -= ($padding * 2) + ($borders * 2);
+        $width -= ($padding * 2);
+        $width -= ($borders * 2);
 
         return $width;
     }

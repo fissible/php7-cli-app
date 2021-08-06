@@ -321,6 +321,7 @@ class Str
      */
     public static function _length($input)
     {
+        $input = preg_replace('/\t/', '    ', $input);
         $input = preg_replace('#\\x1b[[][^A-Za-z]*[A-Za-z]#', '', $input);
         return mb_strlen($input);
     }
@@ -424,6 +425,30 @@ class Str
     public static function _rtrim($input, $character_mask = " \t\n\r\0\x0B")
     {
         return rtrim($input, $character_mask);
+    }
+
+    public static function _pad(string $input, int $pad_length, string $pad_string = ' ', $pad_type = STR_PAD_RIGHT)
+    {
+        $i = 0;
+        while (static::_length($input) < $pad_length) {
+            $i++;
+            switch ($pad_type) {
+                case STR_PAD_LEFT:
+                    $input = $pad_string . $input;
+                    break;
+                case STR_PAD_RIGHT:
+                    $input .= $pad_string;
+                    break;
+                case STR_PAD_BOTH:
+                    if ($i % 2 === 0) {
+                        $input .= $pad_string;
+                    } else {
+                        $input = $pad_string . $input;
+                    }
+                    break;
+            }
+        }
+        return $input;
     }
 
     /**
@@ -568,7 +593,7 @@ class Str
     public static function _snake($input, $delimiter = '_')
     {
         $out = [];
-        $parts = str_split($input);
+        $parts = mb_str_split($input);
         foreach ($parts as $key => $char) {
             if ($char) {
                 $last_out_key = count($out) - 1;
@@ -583,6 +608,12 @@ class Str
         $output = trim(static::_lower(implode('', $out)), $delimiter);
 
         return $output;
+    }
+
+    public static function _split($input)
+    {
+        // Split a string (unicode/UTF8 support), do not split after color control codes, eg \033[0;31m
+        return preg_split('#\\e[[][A-Za-z0-9];?[0-9]*m(*SKIP)(*F)|#u', $input, -1, PREG_SPLIT_NO_EMPTY);
     }
 
     public static function _studly($input)

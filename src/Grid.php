@@ -21,13 +21,43 @@ class Grid
      * @param array $array
      * @param mixed $emptyCell
      */
-    public function __construct(array $array = [], $emptyCell = null)
+    public function __construct(iterable $array = [], $emptyCell = null)
     {
         $this->empty = $emptyCell;
 
         if (!empty($array)) {
             $this->setData($array);
         }
+    }
+
+    /**
+     * Create and return a filled grid
+     *
+     * @param integer $width
+     * @param integer|null $height
+     * @param mixed $fill
+     * @return Matrix<Vector<Vector<mixed>>>
+     */
+    public static function create(int $width,  ?int $height = null, $fill = null): Grid
+    {
+        if (is_null($height)) {
+            $height = $width;
+        }
+        $rows = new Vector();
+        $rows->allocate($height);
+        $y = 0;
+        while ($y < $height) {
+            $row = new Vector();
+            $row->allocate($width);
+            $x = 0;
+            while ($x < $width) {
+                $row->push($fill);
+                $x++;
+            }
+            $rows->push($row);
+            $y++;
+        }
+        return new self($rows);
     }
 
     /**
@@ -293,7 +323,7 @@ class Grid
      * @param array $array
      * @return self
      */
-    public function setData(array $array): self
+    public function setData(iterable $array): self
     {
         $this->validate($array);
         $this->height = count($array);
@@ -308,10 +338,14 @@ class Grid
             }
         }
 
-        foreach ($array as $y => $row) {
-            $this->data->push(new Vector(
-                array_pad($row, $this->width, $this->empty)
-            ));
+        foreach ($array as $row) {
+            if (is_array($row)) {
+                $this->data->push(new Vector(
+                    array_pad($row, $this->width, $this->empty)
+                ));
+            } else {
+                $this->data->push($row);
+            }
         }
 
         $this->rewind();
@@ -327,6 +361,19 @@ class Grid
         return $this->data->toArray();
     }
 
+    public function valid(int $y, int $x = null): bool
+    {
+        if ($y + 1 > $this->height) {
+            return false;
+        }
+
+        if ($x + 1 > $this->width) {
+            return false;
+        }
+
+        return true;
+    }
+
     /**
      * @return int
      */
@@ -335,8 +382,17 @@ class Grid
         return $this->width;
     }
 
-    private function validate(array $array)
+    private function validate(iterable $array)
     {
+        if ($array instanceof Vector) {
+            $array = $array->toArray();
+        }
+
+        $array = array_map(function ($_array) {
+            if ($_array instanceof Vector) return $_array->toArray();
+            return $_array;
+        }, (array) $array);
+
         if (!Arr::isIndexed($array)) {
             throw new \InvalidArgumentException('Grid must be initialized with an indexed array.');
         }
@@ -345,7 +401,7 @@ class Grid
             throw new \InvalidArgumentException('Grid must be initialized with an indexed array of arrays.');
         }
 
-        foreach ($array as $key => $_array) {
+        foreach ($array as $_array) {
             if (!Arr::isIndexed($_array)) {
                 throw new \InvalidArgumentException('Grid must be initialized with an indexed array of indexed arrays.');
             }
