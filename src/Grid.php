@@ -358,7 +358,9 @@ class Grid
      */
     public function toArray(): array
     {
-        return $this->data->toArray();
+        return array_map(function ($row) {
+            return $row->toArray();
+        }, $this->data->toArray());
     }
 
     public function valid(int $y, int $x = null): bool

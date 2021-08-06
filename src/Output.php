@@ -242,6 +242,11 @@ class Output
     {
         $printedCols = false;
         $row_width = strlen(count($array) . '') + 1;
+
+        if (!is_array($array[0])) {
+            throw new \InvalidArgumentException(sprintf('Inner values must be an array or an object that implements Countable, got "%s"', gettype($array[0])));
+        }
+
         $col_width = strlen(count($array[0]) . '') + 1;
 
         print "\n[";
@@ -572,6 +577,16 @@ class Output
             $variant = static::variant();
         }
         switch ($input) {
+            case 'down_right':
+            case 'down_left':
+            case 'up_right':
+            case 'up_left':
+            case 'ver_right':
+            case 'ver_left':
+            case 'down_hor':
+            case 'up_hor':
+            case 'cross':
+            case '':
             case (static::line_joint('top:left',  $variant)):
             case (static::line_joint('top:right', $variant)):
             case (static::line_joint('mid:left',  $variant)):
@@ -580,15 +595,13 @@ class Output
             case (static::line_joint('bot:right', $variant)):
                 $out = '+';
                 break;
+            case 'ver':
             case (static::uchar('ver', $variant, true)):
                 $out = '|';
                 break;
+            case 'hor':
             case (static::uchar('hor', $variant, true)):
-                if ($variant == 'light') {
-                    $out = '-';
-                } else {
-                    $out = '=';
-                }
+                $out = '-';
                 break;
         }
 
@@ -664,6 +677,8 @@ class Output
                 if (array_key_exists($char, static::$unicode_borders[$variant])) {
                     $out = static::$unicode_borders[$variant][$char];
                 }
+            } else {
+                $out = static::non_unicode_variant($out, $variant);
             }
         }
 

@@ -8,11 +8,20 @@ class Event extends \Exception
 {
     private static Collection $Handlers;
 
-    public function __construct()
+    private array $payload;
+
+    public function __construct(array $payload = [])
     {
         parent::__construct(get_class($this), 0);
 
+        $this->payload = $payload;
+
         static::$Handlers = new Collection();
+    }
+
+    public function payload(): array
+    {
+        return $this->payload;
     }
 
     /**
@@ -45,6 +54,10 @@ class Event extends \Exception
     {
         if (isset($this->{$name})) {
             return $this->{$name};
+        }
+
+        if (isset($this->payload[$name])) {
+            return $this->payload[$name];
         }
 
         return null;

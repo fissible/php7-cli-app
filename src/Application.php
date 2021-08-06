@@ -50,6 +50,8 @@ class Application
 
     protected Command $defaultCommand;
 
+    private Command $Command;
+
     protected string $defaultPrompt = ' > ';
 
     protected array $instances;
@@ -58,7 +60,11 @@ class Application
 
     protected string $script;
 
-    private Router $Router;
+    protected Route $PreviousRoute;
+
+    protected Route $Route;
+
+    protected Router $Router;
 
     private $input;
 
@@ -121,6 +127,45 @@ class Application
         return sha1($rf->getFileName().$rf->getEndLine());
     }
 
+    /**
+     * Find the Route at the given name and return its configured action.
+     * 
+     * @param string $name
+     * @return callable|Command|null
+     */
+    public function action(string $name)
+    {
+        if ($Route = $this->Router->getRoute($name)) {
+            return $Route->getAction();
+        }
+        return null;
+    }
+
+    /**
+     * Check if Application is at the given route name.
+     * 
+     * @param string $name
+     * @return bool
+     */
+    public function atRoute(string $name): bool
+    {
+        if (isset($this->Route)) {
+            return $this->Route->is($name);
+        }
+        return false;
+    }
+
+    public function preRunValidation()
+    {
+        try {
+            $this->checkMissingParameters();
+        } catch (MissingArgumentException $e) {
+            $this->error($e->getMessage());
+            $this->doHelp();
+            $this->exit();
+        }
+    }
+
     public function checkMissingParameters()
     {
         $this->Parameters->validateHasRequiredArguments();
@@ -143,6 +188,7 @@ class Application
     public function screen()
     {
         $this->screen = true;
+
         Output::tput('smcup');
     }
 
@@ -328,9 +374,20 @@ class Application
         return null;
     }
 
-    public function route($input, array $params = [])
+    /**
+     * Lookup the Route by name an ivoke its action.
+     * 
+     * @param string $input
+     * @param array $params
+     * @return mixed
+     */
+    public function route(string $input, array $params = [])
     {
         $returnCode = 0;
+
+        $this->Router->validate($input);
+        $this->setRoute($this->Router->getRoute($input));
+
         $return = $this->Router->route($input, $params);
 
         if (is_int($return)) {
@@ -345,36 +402,42 @@ class Application
     }
 
     /**
+     * Set the current Route.
+     * 
+     * @param Route $Route
+     * @return self
+     */
+    public function setRoute(Route $Route): self
+    {
+        if (isset($this->Route)) {
+            $this->PreviousRoute = $this->Route;
+        }
+        $this->Route = $Route;
+        
+        return $this;
+    }
+
+    /**
      * Provide a FQN of a Command to instantiate and run. eg.
      *   $this->run(\My\App\ListCommand::class);
      * 
      * @param Command $command
      * @return mixed
      */
-    public function run($command = null)
+    public function run(Command $command = null)
     {
-        try {
-            $this->checkMissingParameters();
-        } catch (MissingArgumentException $e) {
-            $this->error($e->getMessage());
-            $this->doHelp();
-            $this->exit();
-        }
-        
-
-        $defaultCommand = $command;
+        $this->preRunValidation();
 
         try {
-            if (is_null($command) && isset($this->defaultCommand)) {
-                $this->return = $this->defaultCommand->run();
+            if ($command) {
+                $this->return = $command->run();
 
                 if (is_int($this->return)) {
                     $this->returnCode = $this->return;
                 }
-            } elseif (!is_null($command) && $command instanceof Command) {
-                return $command->run();
             } else {
-                $this->mainLoop($defaultCommand);
+                $this->Command = $this->defaultCommand ?? null;
+                $this->mainLoop();
             }
         } catch (Event $e) {
             $this->handle($e);
@@ -395,20 +458,19 @@ class Application
 
     /**
      * The main application loop; prompts for and executes application commands
-     * 
-     * @param string|null $defaultCommand
      */
-    public function mainLoop(?string $defaultCommand = null): void
+    public function mainLoop(): void
     {
-        if ($defaultCommand) {
-            $command = $defaultCommand;
+        if ($this->Command) {
+            $command = $this->Command;
         } else {
-            $command = $this->promptCommand($defaultCommand);
+            // Display the configured main menu
+            $command = $this->promptCommand($this->Command);
         }
         
         while ($command) {
             $this->return = $this->route($command);
-            $command = $this->promptCommand($defaultCommand);
+            $command = $this->promptCommand();
         }
     }
 
@@ -451,10 +513,9 @@ class Application
     /**
      * Prompt the user to enter a command (valid Route name).
      * 
-     * @param string|null $defaultCommand
      * @return mixed
      */
-    protected function promptCommand(?string $defaultCommand = null): ?string
+    protected function promptCommand(): ?string
     {
         if (extension_loaded('readline')) {
             readline_completion_function(function ($input, $index) {
@@ -466,17 +527,12 @@ class Application
 
         $command = $this->prompt();
 
-        if (is_null($command)) {
-            $command = $defaultCommand;
-        }
-
         if (strtolower($command) === 'exit') {
             throw new Abort();
         }
 
         if (!$this->Router->has($command)) {
             $this->error('Invalid command.');
-            $command = $defaultCommand;
         }
 
         return $command;
@@ -688,7 +744,7 @@ class Application
      * @param bool $numbers
      * @return Table
      */
-    public function index(Collection $Items, $columns, $numbers = false): Table
+    public function index(Collection $Items, $columns, $numbers = false, array $options = []): Table
     {
         $headers = array_values($columns);
         if ($numbers) array_unshift($headers, '');
@@ -711,7 +767,7 @@ class Application
             return $row;
         })->toArray();
 
-        $Table = $this->table($headers, $rows);
+        $Table = $this->table($headers, $rows, $options);
 
         return $Table;
     }
@@ -912,7 +968,7 @@ class Application
      */
     public function table(array $headers = [], array $rows = [], array $options = []): Table
     {
-        return new Table($this, $headers, $rows, $options);
+        return new Table($headers, $rows, $options);
     }
 
     /**
@@ -961,6 +1017,10 @@ class Application
 
     public function __get($name)
     {
+        if (isset($this->$name)) {
+            return $this->$name;
+        }
+
         return $this->Parameters->{$name};
         // if ($name === 'Options') {
         //     return $this->Parameters->Options;
