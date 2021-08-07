@@ -752,7 +752,7 @@ Array
     {
         $branches = git::branch('-l');
         if (empty($branches)) {
-            throw new GitException('No branches found in respository at \'%s\'', $this->directory);
+            throw new GitException(sprintf('No branches found in respository at \'%s\'', $this->directory));
         }
 
         $name = ltrim(trim($branches[0]), '*');
