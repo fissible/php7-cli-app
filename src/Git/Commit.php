@@ -88,6 +88,13 @@ class Commit {
         return $this->Parent ?? null;
     }
 
+    public function isDetached(): bool
+    {
+        $output = git::rev_parse('--abbrev-ref', 'HEAD');
+
+        return $output[0] === '* (no branch)';
+    }
+
     /**
      * Parse a git log entry for this commit.
      *

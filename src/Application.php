@@ -940,7 +940,7 @@ class Application
     /**
      * @param string $prompt
      * @param string|null $default
-     * @return bool|null
+     * @return bool
      */
     public function promptYesNo(string $prompt, ?bool $default = false): ?bool
     {
@@ -949,7 +949,8 @@ class Application
         if (is_string($response)) {
             return strtolower(substr($response, 0, 1)) === 'y';
         }
-        return null;
+
+        return $default;
     }
 
     /**

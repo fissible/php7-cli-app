@@ -23,6 +23,15 @@ class Route {
         return $this->name;
     }
 
+    public function getAction()
+    {
+        if (isset($this->callable)) {
+            return $this->callable;
+        }
+
+        return $this->Command;
+    }
+
     public function getAliases(): array
     {
         return $this->aliases ?? [];
@@ -43,11 +52,11 @@ class Route {
     {
         if (isset($this->callable)) {
             $function = $this->callable;
-            return $function($Application, ...$params);
+            return $function($Application, $params);
         }
 
         if (isset($this->Command)) {
-            return $this->Command->run(...$params);
+            return $this->Command->run($params);
         }
     }
 

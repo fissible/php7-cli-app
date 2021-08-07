@@ -2,6 +2,7 @@
 
 namespace PhpCli\Git;
 
+use PhpCli\Collection;
 use PhpCli\Str;
 
 class Remote {
@@ -14,7 +15,7 @@ class Remote {
 
     private string $HEAD_branch;
 
-    private array $branches;
+    private Collection $Branches;
 
     public function __construct(string $name, ?string $url = null)
     {
@@ -23,42 +24,56 @@ class Remote {
         $this->setPushUrl($url);
     }
 
+    public static function all(): array
+    {
+        $Remotes = [];
+        $output = git::remote('-v');
+
+        foreach ($output as $remote) {
+            list($name, $url, $type) = preg_split('/\s+/', $remote, 3);
+            $Remote = new Remote($name);
+
+            if (!isset($Remotes[$name])) {
+                $Remotes[$name] = $Remote;
+            }
+
+            if ($type === '(fetch)') $Remotes[$name]->setFetchUrl($url);
+            if ($type === '(push)') $Remotes[$name]->setPushUrl($url);
+        }
+
+        return $Remotes;
+    }
+
     /**
      * Add a remote repository.
      *
      * @param string $name
      * @param string $url
-     * @return bool
+     * @return array
      */
-    public function add(bool $fetch = false, bool $tags = false): bool
+    public function add(bool $fetch = false, bool $tags = false): array
     {
         $flag = $tags ? '--tags' : null;
         $flag ??= $fetch ? '-f' : null;
 
-        git::remote('add', $this->name, $this->url, $flag);
-
-        return git::result() === 0;
+        return git::remote('add', $this->name, $this->url, $flag);
     }
 
     public function branch(string $name, bool $refresh = false): ?Branch
     {
-        if (!isset($this->branches) || $refresh) {
+        if (!isset($this->Branches) || $refresh) {
             $this->show();
         }
 
-        if (isset($this->branches[$name])) {
-            return $this->branches[$name];
-        }
-
-        return null;
+        return $this->Branches->get($name);
     }
 
-    public function branches(bool $refresh = false): array
+    public function branches(bool $refresh = false): Collection
     {
-        if (!isset($this->branches) || $refresh) {
+        if (!isset($this->Branches) || $refresh) {
             $this->show();
         }
-        return $this->branches;
+        return $this->Branches;
     }
 
     /**
@@ -66,15 +81,17 @@ class Remote {
      * automatically merge it with any of your work or modify 
      * what you’re currently working on
      *
-     * @return boolean
+     * @return array
      */
-    public function fetch(bool $prune = false): bool
+    public function fetch(bool $prune = false): array
     {
-        $prune = $prune ? '--prune' : null;
+        $args = ['--verbose'];
+        if ($prune) {
+            $args[] = '--prune';
+        }
+        $args[] = $this->name;
 
-        git::fetch($this->name, $prune);
-
-        return git::result() === 0;
+        return git::fetch(...$args);
     }
 
     public function name(): string
@@ -100,8 +117,8 @@ class Remote {
             throw new \InvalidArgumentException();
         }
 
-        if (isset($this->branches)) {
-            return isset($this->branches[$branch]);
+        if (isset($this->Branches)) {
+            return $this->Branches->has($branch);
         }
 
         // git ls-remote --heads git@github.com:user/repo.git branch-name
@@ -109,11 +126,9 @@ class Remote {
         return (bool) git::ls_remote('--heads', $this->fetchUrl, $branch);
     }
 
-    public function remove(): bool
+    public function remove(): array
     {
-        git::remote('rm', $this->name);
-
-        return git::result() === 0;
+        return git::remote('rm', $this->name);
     }
 
     public function setFetchUrl(?string $url = null): self
@@ -217,7 +232,7 @@ git remote show origin
                     //    KA-1-admin-sign-in                                                                      tracked
                     list($branch, $status) = preg_split('/\s+/', trim($line), 2);
 
-                    $this->branches[$branch] = new Branch($branch, $status === 'tracked');
+                    $this->Branches->set($branch, new Branch($branch, $status === 'tracked'));
                 }
             }
 
@@ -236,13 +251,12 @@ git remote show origin
                     if (Str::startsWith($merges, 'merges with remote ')) {
                         $merges = Str::lprune($merges, 'merges with remote ');
                     }
-                    
 
                     $local_branches[$branch] = new Branch($branch);
-                    $local_branches[$branch]->setMergeTo(new Branch($merges));
+                    $local_branches[$branch]->setMergeTo(new Branch($this->name .'/' . $merges));
 
-                    if ($merges && isset($this->branches[$branch])) {
-                        $this->branches[$branch]->setMergeTo(new Branch($merges));
+                    if ($merges && $this->Branches->has($branch)) {
+                        $this->Branches->get($branch)->setMergeTo(new Branch($this->name . '/' . $merges));
                     }
                 }
             }
@@ -265,38 +279,17 @@ git remote show origin
                         $status = trim($status, '()');
                     }
 
-
                     $local_refs[$branch] = new Branch($branch);
-                    $local_refs[$branch]->setPushTo(new Branch($pushes));
+                    $local_refs[$branch]->setPushTo(new Branch($this->name . '/' . $pushes));
 
-                    if ($pushes && isset($this->branches[$branch])) {
-                        $this->branches[$branch]->setStatus($status);
-                        $this->branches[$branch]->setPushTo(new Branch($pushes));
+                    if ($pushes && $this->Branches->has($branch)) {
+                        $this->Branches->get($branch)->setStatus($status);
+                        $this->Branches->get($branch)->setPushTo(new Branch($this->name . '/' . $pushes));
                     }
                 }
             }
         }
 
         return array_merge($local_branches, $local_refs);
-    }
-
-    public static function all(): array
-    {
-        $Remotes = [];
-        $output = git::remote('-v');
-
-        foreach ($output as $remote) {
-            list($name, $url, $type) = preg_split('/\s+/', $remote, 3);
-            $Remote = new Remote($name);
-
-            if (!isset($Remotes[$name])) {
-                $Remotes[$name] = $Remote;
-            }
-
-            if ($type === '(fetch)') $Remotes[$name]->setFetchUrl($url);
-            if ($type === '(push)') $Remotes[$name]->setPushUrl($url);
-        }
-
-        return $Remotes;
     }
 }

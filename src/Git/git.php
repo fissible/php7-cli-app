@@ -3,6 +3,7 @@
 namespace PhpCli\Git;
 
 use PhpCli\Str;
+use PhpCli\Exceptions\GitException;
 
 class git {
 
@@ -101,7 +102,7 @@ class git {
         if (!empty($output)) {
             if (Str::startsWith($output[0], 'fatal:') || Str::startsWith($output[0], 'error:')) {
                 $error = implode("\n", $output);
-                throw new \Exception('Error: '.Str::lprune(Str::lprune($error, 'fatal:'), 'error:'));
+                throw new GitException('Error: '.Str::lprune(Str::lprune($error, 'fatal:'), 'error:'));
             }
         }
 

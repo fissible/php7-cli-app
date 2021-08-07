@@ -163,32 +163,29 @@ class File {
     }
 
     /**
-     * Get a git status like string for this file.
+     * Get a git status for this file.
      *
      * @return string
      */
-    public function renderStatus(): string
+    public function status(): string
     {
-        // return $this->index_status.'/'.$this->worktree_status.': '.$this->getPath();
         $status = '';
 
         switch ($this->worktree_status) {
             case 'untracked':
                 break;
             case 'added':
-                $status = 'new file:   ';
+                $status = 'new file';
                 break;
             case 'deleted':
                 if ($this->worktree_status === 'updated but unmerged') {
-                    $status = 'deleted by us:   ';
+                    $status = 'deleted by us';
                 }
                 break;
             default:
-                $status = $this->worktree_status.':   ';
+                $status = $this->worktree_status;
                 break;
         }
-
-        $status .= $this->getPath();
 
         return $status;
     }

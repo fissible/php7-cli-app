@@ -3,29 +3,39 @@
 namespace PhpCli\Git;
 
 use PhpCli\Collection;
+use PhpCli\Exceptions\GitException;
 use PhpCli\Facades\Log;
+use PhpCli\Filesystem\Directory;
+use PhpCli\Observers\Observable;
+use PhpCli\Observers\Subject;
 use PhpCli\Output;
 use PhpCli\Reporting\Logger;
+use PhpCli\Reporting\Drivers\BufferLogger;
 use PhpCli\Reporting\Drivers\NullLogger;
 use PhpCli\Str;
+use PhpCli\Validation\UrlRule;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
-class Repository {
+class Repository implements Subject {
 
-    private Branch $Branch;
+    use Observable {
+        Observable::__construct as private intialize;
+    }
+
+    private ?Branch $Branch;
 
     private string $directory;
 
     private Commit $HEAD;
 
-    private Stage $Index;
+    private Stage $Stage;
 
     private Logger $Logger;
 
     private Output $output;
 
-    private array $Remotes;
+    private Collection $Remotes;
 
     private array $untracked_files;
 
@@ -73,8 +83,9 @@ class Repository {
         }
         $this->directory = rtrim($directory, DIRECTORY_SEPARATOR);
         git::cd($this->directory);
-        $this->Index = new Stage($this);
+        $this->Stage = new Stage($this);
         $this->output = new Output();
+        $this->intialize();
     }
 
     /**
@@ -86,7 +97,7 @@ class Repository {
      */
     public function add($file): self
     {
-        if (!$this->Index->add($file)) {
+        if (!$this->Stage->add($file)) {
             throw new \Exception('Error adding file to the index.');
         }
 
@@ -104,8 +115,10 @@ class Repository {
     {
         $Remote = new Remote($name, $url);
 
-        if ($Remote->add($fetch, $tags)) {
-            $this->Remotes[$name] = $Remote;
+        $this->_log($Remote->add($fetch, $tags));
+
+        if (git::result() === 0) {
+            $this->Remotes->set($name, $Remote);
 
             return true;
         }
@@ -118,15 +131,199 @@ class Repository {
      *
      * @return Branch
      */
-    public function branch(): Branch
+    public function branch(string $new = null, string $from = null): Branch
     {
         $this->validateInitialized();
 
-        $output = git::rev_parse('--abbrev-ref', 'HEAD');
+        if (is_null($new)) {
+            $output = git::rev_parse('--abbrev-ref', 'HEAD');
 
-        $this->setBranch($output[0]);
+            if ($output[0] === '* (no branch)') {
+                $this->Branch = null;
+            } else {
+                $this->setBranch($output[0]);
+            }
 
-        return $this->Branch;
+            return $this->Branch;
+
+        } else {
+            if (is_null($from)) {
+                git::branch($new);
+            } else {
+                git::branch($new, $from);
+            }
+        }
+
+        return $this->getBranch($new);        
+    }
+
+    /**
+     * Get a list of branches.
+     * 
+     * @return Collection
+     */
+    public function branches(): Collection
+    {
+        // $branches = git::branch('--a');
+        $Branches = new Collection();
+
+        // foreach ($branches as $branch) {
+        //     $isLocal = false;
+        //     if ($isCheckedOut = Str::startsWith($branch, '*')) {
+        //         $branch = Str::replace($branch, '*', '');
+        //         $isLocal = true;
+        //     }
+            
+        //     $branch = trim($branch);
+            
+        //     if ($isRemote = Str::startsWith($branch, 'remotes')) {
+        //         [, $remoteName, $branch] = explode('/', $branch);
+
+        //         $Branch = new Branch($branch, $isLocal && $isRemote, $isCheckedOut);
+
+                // if ($Remote = $this->remote($remoteName)) {
+                //     $Branch->setRemote($Remote);
+                // }
+        //     } else {
+        //         $isLocal = true;
+        //         $Branch = new Branch($branch, $isLocal && $isRemote, $isCheckedOut);
+        //     }
+
+        //     $Branches->push($Branch);
+        // }
+
+        /*
+> git branch -vv
+  development 220b2bf Fix database driver rename.
+* main        9dacb73 [origin/main: ahead 1] Broad refactors and bug fixes.
+        */
+
+        // Iterate all local branches and their tracking data
+        foreach (git::branch('-vv') as $branchInfo) {
+            $isLocal = true;
+            
+            if ($isCheckedOut = Str::startsWith($branchInfo, '*')) {
+                $branchInfo = Str::replace($branchInfo, '*', '');
+            }
+
+            [$name, $info] = preg_split('/\s+/', trim($branchInfo), 2);
+            [$sha, $info] = preg_split('/\s+/', trim($info), 2);
+
+            // append '[]' to the info to avoid getting commit message data if no tracking info exists
+            $trackingInfo = trim(Str::capture($info.' []', '[', ']'));
+
+    // print_r(compact('name', 'sha', 'trackingInfo'));
+
+            $Branch = new Branch($name, !empty($trackingInfo), $isCheckedOut);
+
+            if ($trackingInfo) {
+                $status = null;
+
+                if (preg_match('/\s/', $trackingInfo) === 1) {
+                    [$remote, $status] = preg_split('/\s+/', trim($trackingInfo), 2);
+                } else {
+                    $remote = $trackingInfo;
+                }
+                
+
+                // 0 => "origin/main:" 
+                if ($remote) {
+                    [$remote, $remoteBranch] = explode('/', $remote);
+                    $remoteBranch = rtrim($remoteBranch, ':');
+                    
+                    if ($RemoteBranch = $this->getBranch($remote . '/' . $remoteBranch)) {
+                        $Branch->setMergeTo($RemoteBranch);
+                        $Branch->setPushTo($RemoteBranch);
+                    }
+
+                    if ($Remote = $this->remote($remote)) {
+                        $Branch->setRemote($Remote);
+                    }
+                }
+
+                // 1 => "ahead 1"
+                if ($status) {
+                    if (Str::contains($status, ',')) {
+                        foreach ($aheadBehind = explode(',', $status) as $status) {
+                            if (Str::startsWith($status, 'ahead')) {
+                                if ($ahead = intval(Str::after($status, 'ahead '))) {
+                                    $Branch->setAhead($ahead);
+                                }
+                            } elseif (Str::startsWith($status, 'behind')) {
+                                if ($behind = intval(Str::after($status, 'behind '))) {
+                                    $Branch->setBehind($behind);
+                                }
+                            }
+                        }
+
+                    } elseif (Str::startsWith($status, 'ahead')) {
+                        if ($ahead = intval(Str::after($status, 'ahead '))) {
+                            $Branch->setAhead($ahead);
+                        }
+                    } elseif (Str::startsWith($status, 'behind')) {
+                        if ($behind = intval(Str::after($status, 'behind '))) {
+                            $Branch->setBehind($behind);
+                        }
+                    }
+                }
+            }
+            $Branches->push($Branch);
+        }
+        
+        // Iterate all remote branches
+        $HEADBranch = [
+            'remote' => '',
+            'branch' => ''
+        ];
+        foreach (git::branch('-r') as $branch) {
+            //setIsHead(
+            /*
+  origin/HEAD -> origin/main
+  origin/main
+            */
+
+            if (Str::contains($branch, '/HEAD ->')) {
+                [$remoteHEAD, $branch] = explode(' -> ', $branch);
+                [$remote, ] = explode('/', $remoteHEAD);
+                $HEADBranch['remote'] = trim($remote);
+                $HEADBranch['branch'] = trim($branch);
+
+                continue;
+            }
+
+            [$remoteName, $branch] = explode('/', $branch);
+            $remoteName = trim($remoteName);
+
+            $contains = $Branches->first(function (Branch $Branch) use ($remoteName, $branch) {
+                $RemoteBranch = $Branch->mergesTo() ?? $Branch->pushesTo();
+                if ($RemoteBranch) {
+                    return $RemoteBranch->name() === $remoteName . '/' . $branch;
+                }
+                return false;
+            });
+
+            if ($contains) {
+                if ($contains->name() === $HEADBranch['branch']) {
+                    $contains->setIsHead();
+                }
+                continue;
+            }
+
+
+            $Branch = new Branch($remoteName . '/' . $branch, !empty($trackingInfo), false);
+
+            if ($Branch->name() === $HEADBranch['branch']) {
+                $Branch->setIsHead();
+            }
+
+            if ($Remote = $this->remote($remoteName)) {
+                $Branch->setRemote($Remote);
+            }
+
+            $Branches->push($Branch);
+        }
+
+        return $Branches;
     }
 
     /**
@@ -154,17 +351,24 @@ class Repository {
         }
         
         if ($Remote) {
-            if (is_string($Remote)) {
-                $Remote = $this->remote($Remote);
-            }
+            // special case to create new branch from detached HEAD
+            if (is_string($Remote) && $Remote === 'HEAD') {
+                $remote = 'HEAD';
 
-            $remote = $Remote->name().'/'.$branch;
+            // otherwise get the remote branch name
+            } else {
+                if (is_string($Remote)) {
+                    $Remote = $this->remote($Remote);
+                }
+
+                $remote = $Remote->name().'/'.$branch;
+            }
         }
 
         // has unstaged or staged changes?
-
         // @todo
 
+        
         // git checkout -b branch origin/branch
 
         $args = [];
@@ -182,6 +386,84 @@ class Repository {
     }
 
     /**
+     * Clone a local or remote repository
+     * 
+     * git clone https://repos.org/my-repo
+     *  -> `cwd`/my-repo/.git
+     * 
+     * git clone https://repos.org/my-repo repo-copy
+     *  -> `cwd`/repo-copy/.git
+     * 
+     * git clone /Users/me/repos/my-repo
+     *  -> `cwd`/my-repo/.git
+     * 
+     * git clone /Users/me/repos/my-repo repo-copy
+     *  -> `cwd`/repo-copy/.git
+     * 
+     * @param string $source
+     * @param string $directory
+     * @return Repository
+     */
+    public function clone(string $repository = '.', string $directory = null): Repository
+    {
+        [$repository, $directory, $destination] = $this->getValidatedCloneParameters($repository, $directory);
+
+        $args = [$repository, $directory, '--verbose'];
+
+        $this->_log(git::clone(...$args));
+
+        $Repository = new self($destination);
+
+        return $Repository;
+    }
+
+    /**
+     * @param string $source
+     * @param string $directory
+     * @return array
+     */
+    public function getValidatedCloneParameters(string $repository = '.', string $directory = null): array
+    {
+        $UrlRule = new UrlRule();
+        $destination = $this->directory;
+
+        // Validate the repository
+        if ($repository === '.' || $repository === './') {
+            $repository = $this->directory;
+        } elseif (!$UrlRule->passes('', $repository)) {
+            $Dir = new Directory($repository);
+
+            if (!$Dir->exists()) {
+                throw new GitException(sprintf('Error: source directory "%s" not found.', $repository));
+            }
+        }
+
+        // Validate the destination
+        if ($directory) {
+            $directory = ltrim(str_replace('./', '', $directory), '.');
+            $Dir = new Directory($directory);
+
+            if ($Dir->exists() && !$Dir->empty()) {
+                throw new GitException(sprintf('Error: destination path \'%s\' already exists and is not an empty directory.', $directory));
+            }
+
+            $destination = $this->path($directory);
+        }
+
+        if ($repository === $destination) {
+            $directory = basename($destination) . '_copy';
+            $destination = $this->path($directory);
+        }
+        
+        if (is_null($directory) && $UrlRule->passes('', $repository)) {
+            $destination = $this->path(basename(Str::before($repository, '.git')));
+        }
+
+        return [$repository, $directory, $destination];
+    }
+
+
+    /**
      * Record staged changes to the repository.
      *
      * @param string $message
@@ -195,8 +477,8 @@ class Repository {
         }
 
         // check if there is anything staged on the index
-        if (!$amend && is_null($path) && empty($this->Index->getChanges())) {
-            throw new \Exception('No changes staged.');
+        if (!$amend && is_null($path) && empty($this->Stage->getChanges())) {
+            throw new GitException('No changes staged.');
         }
 
         $args = [];
@@ -322,11 +604,9 @@ Array
      * @param Remote|null $Remote
      * @return bool
      */
-    public function deleteBranch(Branch $Branch, ?Remote $Remote = null): bool
+    public function deleteBranch(Branch $Branch, ?Remote $Remote = null, bool $force = false): bool
     {
-        if (!$Branch->delete()) {
-            throw new \Exception(sprintf('Error deleting branch "%s".', $Branch->name()));
-        }
+        $this->_log($Branch->delete($force));
 
         if ($Remote) {
             git::push($Remote->name(), ':'.$Branch->name());
@@ -337,48 +617,32 @@ Array
     }
 
     /**
-     * Render the diff to a string.
+     * Output the diff to stdout.
      *
      * @param string $path
      * @return string
      */
     public function diff(string $path = null, bool $staged = false): self
     {
-        $diffs = $this->getDiff($path, $staged);
+        $diff = $this->renderDiff($path, $staged);
 
-        foreach ($diffs as $File) {
-            $diffString = $File->diff() . '';
-            $lines = explode("\n", $diffString);
-
-            foreach ($lines as $lkey => $line) {
-                if (!empty($line)) {
-                    if ($line[0] === '-') {
-                        $lines[$lkey] = Output::color($line, 'red');
-                    } elseif ($line[0] === '+') {
-                        $lines[$lkey] = Output::color($line, 'green');
-                    } elseif (Str::startsWith($line, '@@ ')) {
-                        if ($sectionHeader = Str::capture($line, '@@', '@@')) {
-                            $sectionHeader = '@@' . $sectionHeader . '@@';
-                            $lines[$lkey] = Str::replace($line, $sectionHeader, Output::color($sectionHeader, 'light_purple'));
-                        }
-                    }
-                }
-            }
-        }
-
-        $this->output->lines($lines);
+        $this->output->line($diff);
 
         return $this;
     }
 
+    /**
+     * Discard local changes (unstages if staged).
+     */
     public function discard(string $path = null)
     {
-        $output = [];
+        // $output = [];
         $StagedFiles = new Collection($this->getDiff($path, true));
 
         if (!$StagedFiles->empty()) {
-            $StagedFiles->each(function (File $File) use (&$output) {
-                $output = array_merge($output, git::reset('--', $File->getPath()));
+            $StagedFiles->each(function (File $File)/* use (&$output)*/ {
+                // $output = array_merge($output, git::reset('--', $File->getPath()));
+                $this->Stage->removeFile($File);
             });
         }
 
@@ -388,18 +652,21 @@ Array
         });
 
         if (!$ModifiedFiles->empty()) {
-            if (version_compare(git::version(), '2.25', '>')) {
-                $ModifiedFiles->each(function (File $File) use (&$output) {
-                    $output = array_merge($output, ...git::restore($File->getPath()));
-                });
-            } else {
-                $ModifiedFiles->each(function (File $File) use (&$output) {
-                    $output = array_merge($output, ...git::checkout('--', $File->getPath()));
-                });
-            }
+            // if (version_compare(git::version(), '2.25', '>')) {
+            //     $ModifiedFiles->each(function (File $File) use (&$output) {
+            //         $output = array_merge($output, ...git::restore($File->getPath()));
+            //     });
+            // } else {
+            //     $ModifiedFiles->each(function (File $File) use (&$output) {
+            //         $output = array_merge($output, ...git::checkout('--', $File->getPath()));
+            //     });
+            // }
+            $ModifiedFiles->each(function (File $File) {
+                $this->Stage->discardFile($File);
+            });
         }
 
-        $this->_log($output);
+        // $this->_log($output);
 
         return $this;
     }
@@ -418,18 +685,21 @@ Array
      * Fetch refs from the remote repository.
      *
      * @param boolean $prune
+     * @param Remote $Remote
      * @return self
      */
-    public function fetch(bool $prune = false): self
+    public function fetch(bool $prune = false, Remote $Remote = null): self
     {
         $Remote ??= $this->remote();
 
         if (is_null($Remote)) {
-            throw new \Exception('No configured fetch source.');
+            throw new GitException('No configured fetch source.');
         }
 
-        if (!$Remote->fetch($prune)) {
-            throw new \Exception(sprintf('Error fetching from remote "%s"', $Remote->name()));
+        $this->_log($Remote->fetch($prune));
+
+        if (git::result() > 0) {
+            throw new GitException(sprintf('Error fetching from remote "%s"', $Remote->name()));
         }
 
         return $this;
@@ -474,6 +744,29 @@ Array
     }
 
     /**
+     * Get the local HEAD branch
+     * 
+     * @return string
+     */
+    public function getHEADBranch(): Branch
+    {
+        $branches = git::branch('-l');
+        if (empty($branches)) {
+            throw new GitException('No branches found in respository at \'%s\'', $this->directory);
+        }
+
+        $name = ltrim(trim($branches[0]), '*');
+        while ($branch = array_shift($branches)) {
+            $branch = ltrim(trim($branch), '*');
+            if (in_array($branch, ['master', 'main', 'trunk'])) {
+                return $this->getBranch($branch);
+            }
+        }
+
+        return $this->getBranch($name);
+    }
+
+    /**
      * Get the file contents of .git/description
      *
      * @return string
@@ -504,7 +797,7 @@ Array
     }
 
     /**
-     * Initialize a git repository in the configured path.
+     * Initialize a git repository in the configured path. If the path directory does not exist, it will be created.
      *
      * @return boolean
      */
@@ -513,6 +806,15 @@ Array
         git::init($this->directory);
 
         return git::result() === 0;
+    }
+
+    public function isHeadDetached(): bool
+    {
+        $this->validateInitialized();
+
+        $output = git::rev_parse('--abbrev-ref', 'HEAD');
+
+        return $output[0] === '* (no branch)';
     }
 
     /**
@@ -613,15 +915,19 @@ Array
     /**
      * Get the full path for the provided relative path.
      *
-     * @param string $sub
+     * @param string $directory
      * @return string
      */
-    public function path($sub = ''): string
+    public function path($directory = ''): string
     {
-        $path = $this->directory.DIRECTORY_SEPARATOR;
+        if (Str::startsWith($directory, DIRECTORY_SEPARATOR)) {
+            return $directory;
+        }
 
-        if ($sub = trim(trim($sub), DIRECTORY_SEPARATOR)) {
-            $path .= $sub;
+        $path = $this->directory;
+
+        if ($directory = trim(trim($directory), DIRECTORY_SEPARATOR)) {
+            $path .= DIRECTORY_SEPARATOR . $directory;
         }
 
         return $path;
@@ -656,7 +962,7 @@ Array
         // @todo
 
         print "\n".__METHOD__.':'.__LINE__;
-        print ($this->Index->hasChanges() ? "has changes" : "has no changes")."\n";
+        print ($this->Stage->hasChanges() ? "has changes" : "has no changes")."\n";
         print_r($this->getStatus());
 
         // $args = ['--rebase'];
@@ -879,7 +1185,7 @@ Array
      * @param string|null $name
      * @return Remote|null
      */
-    public function remote(?string $name = null): ?Remote
+    public function remote(?string $name = null, bool $refreshRemotes = false): ?Remote
     {
         $this->validateInitialized();
 
@@ -891,21 +1197,38 @@ Array
         }
 
         if ($name) {
-            $this->remotes();
+            if (!isset($this->Remotes) || $refreshRemotes) {
+                $this->remotes();
+            }
 
-            if (isset($this->Remotes[$name])) {
-                return $this->Remotes[$name];
+            if (isset($this->Remotes)) {
+                return $this->Remotes->get($name);
             }
         }
         
         return null;
     }
 
-    public function remotes(): array
+    public function remotes(): Collection
     {
-        $this->Remotes = Remote::all();
+        $this->Remotes = new Collection(Remote::all());
 
         return $this->Remotes;
+    }
+
+    /**
+     * Unstage a file from the index.
+     * 
+     * @param [type] $file
+     * @return self
+     */
+    public function remove($file): self
+    {
+        if (!$this->Stage->remove($file)) {
+            throw new \Exception('Error removing file from the index.');
+        }
+
+        return $this;
     }
 
     /**
@@ -920,8 +1243,10 @@ Array
 
         $Remote = new Remote($name);
 
-        if ($Remote->remove()) {
-            unset($this->Remotes[$name]);
+        $this->_log($Remote->remove());
+
+        if (git::result() === 0) {
+            $this->Remotes->pull($name);
 
             return true;
         }
@@ -940,23 +1265,77 @@ Array
     {
         $this->validateHasRemote($oldName);
 
-        git::remote('rename', $oldName, $newName);
+        $this->_log(git::remote('rename', $oldName, $newName));
 
         return git::result() === 0;
+    }
+
+    public function renderCommitGraph()
+    {
+        $graph = git::log(
+            '--graph',
+            '--abbrev-commit',
+            '--decorate',
+            '--format=format:\'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)\'',
+            '--all'
+        );
+
+        return implode("\n", $graph);
+    }
+
+    /**
+     * Render the diff to a string.
+     *
+     * @param string $path
+     * @return string
+     */
+    public function renderDiff(string $path = null, bool $staged = false): string
+    {
+        $diffs = $this->getDiff($path, $staged);
+
+        if (empty($diffs)) {
+            return '';
+        }
+
+        foreach ($diffs as $File) {
+            $diffString = $File->diff() . '';
+            $lines = explode("\n", $diffString);
+
+            foreach ($lines as $lkey => $line) {
+                if (!empty($line)) {
+                    if ($line[0] === '-' && (!isset($line[1]) || $line[1] !== '-')) {
+                        $lines[$lkey] = Output::color($line, 'red');
+                    } elseif ($line[0] === '+' && (!isset($line[1]) || $line[1] !== '+')) {
+                        $lines[$lkey] = Output::color($line, 'green');
+                    } elseif ($line[0] === '-' && isset($line[1]) && $line[1] === '-') {
+                        $lines[$lkey] = Output::bold($line);
+                    } elseif ($line[0] === '+' && isset($line[1]) && $line[1] === '+') {
+                        $lines[$lkey] = Output::bold($line);
+                    } elseif (Str::startsWith($line, '@@ ')) {
+                        if ($sectionHeader = Str::capture($line, '@@', '@@')) {
+                            $sectionHeader = '@@' . $sectionHeader . '@@';
+                            $lines[$lkey] = Str::replace($line, $sectionHeader, Output::color($sectionHeader, 'light_purple'));
+                        }
+                    }
+                }
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     /**
      * Get the status as a string.
      *
-     * @return self
+     * @return string
      */
-    public function status(string $path = null): self
+    public function renderStatus(string $path = null): string
     {
         $output = '';
         $status = $this->getStatus($path);
 
         foreach ($status as $group => $Files) {
-            $output .= "\n".$group."\n";
+            $output .= "\n" . $group . "\n";
             $color = null;
 
             switch ($group) {
@@ -970,16 +1349,59 @@ Array
                     break;
             }
 
+            $filesData = [];
+            $longestStatus = 0;
+
             foreach ($Files as $File) {
-                $fileStatus = $File->renderStatus();
-                if ($color) {
-                    $fileStatus = Output::color($fileStatus, $color);
+                $status = $File->status();
+                $len = Str::length($status);
+                $filesData[$File->getPath()] = $status;
+                if ($len > $longestStatus) {
+                    $longestStatus = $len;
                 }
-                $output .= "\t". $fileStatus."\n";
+            }
+
+            foreach ($filesData as $path => $status) {
+                if ($status) {
+                    $status = Str::pad($status.': ', $longestStatus + 5).$path;
+                } else {
+                    $status = $path;
+                }
+                
+                if ($color) {
+                    $status = Output::color($status, $color);
+                }
+                $output .= "    " . $status . "\n";
             }
         }
 
-        $this->output->line($output);
+        return $output;
+    }
+
+    /**
+     * This command updates the index using the current content found in the
+     * working tree, to prepare the content staged for the next commit. 
+     *
+     * @param [type] $file
+     * @return self
+     */
+    public function stage($file): self
+    {
+        if (!$this->Stage->add($file)) {
+            throw new \Exception('Error staging file.');
+        }
+
+        return $this;
+    }
+
+    /**
+     * Output the status.
+     *
+     * @return self
+     */
+    public function status(string $path = null): self
+    {
+        $this->output->line($this->renderStatus($path));
 
         return $this;
     }
@@ -995,6 +1417,21 @@ Array
         $this->validateInitialized();
 
         return (bool) file_put_contents($this->path('.git/description'), $name);
+    }
+
+    /**
+     * Unstage a file from the index.
+     * 
+     * @param [type] $file
+     * @return self
+     */
+    public function unstage($file): self
+    {
+        if (!$this->Stage->remove($file)) {
+            throw new \Exception('Error unstaging file.');
+        }
+
+        return $this;
     }
 
     /**
@@ -1278,7 +1715,7 @@ Untracked files:
         return null;
     }
 
-    private function Logger(): ?Logger
+    public function Logger(): ?Logger
     {
         if (!isset($this->Logger)) {
             if ($logger = $this->config('core.logger')) {
@@ -1295,7 +1732,12 @@ Untracked files:
     private function _log(array $data, string $level = Logger::INFO)
     {
         if (count($data)) {
-            $this->Logger()->log(implode("\n", $data), $level);
+            $Logger = $this->Logger();
+            $Logger->log(str_replace(["\t", "'"], [' ', ''], implode("\n", $data)), $level);
+            
+            if ($Logger instanceof BufferLogger) {
+                $this->notify();
+            }
         }
     }
 }
