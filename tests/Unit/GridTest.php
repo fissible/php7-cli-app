@@ -60,6 +60,36 @@ class GridTest extends TestCase
         $this->assertEquals($expected, $actual);
     }
 
+    public function testFind()
+    {
+        $g = new Grid([
+            ['o', 'n', 'e'],
+            ['t', 'w', 'o'],
+            ['t', 'h', 'r', 'e', 'e']
+        ]);
+
+        $expected = [2, 2];
+        $actual = $g->find('ree');
+
+        $this->assertEquals($expected, $actual);
+
+        $g = new Grid([
+            ['┌', '─', '─', '┬', '─', '─', '┐'],
+            ['│', 'w', 'o', '│', 'v', 'e', '│'],
+            ['└', '─', '─', '┴', '─', '─', '┘']
+        ]);
+
+        $expected = [1, 1];
+        $actual = $g->find('wo');
+
+        $this->assertEquals($expected, $actual);
+
+        $expected = [1, 4];
+        $actual = $g->find('ve');
+
+        $this->assertEquals($expected, $actual);
+    }
+
     public function testGetInvalidRowOffsetException()
     {
         $g = new Grid([

@@ -543,6 +543,7 @@ class File {
 
         $previousMode = $this->mode ?? null;
         $opened = $this->open(self::EXISTS_READ_ONLY);
+
         rewind($this->resource);
 
         while (false !== $line = fgets($this->resource)) {
@@ -749,7 +750,7 @@ class File {
         if ($asArray) {
             return file($this->path, FILE_IGNORE_NEW_LINES);
         } elseif (isset($this->resource) && $offset === 0 && is_null($length)) {
-            // rewind($this->resource);
+            rewind($this->resource);
             $size = filesize($this->path);
 
             if ($size > 0) {
@@ -859,7 +860,10 @@ class File {
     private function close(): bool
     {
         if (isset($this->resource) && is_resource($this->resource)) {
-            return fclose($this->resource);
+            $closed = fclose($this->resource);
+            unset($this->resource);
+
+            return $closed;
         }
         return false;
     }

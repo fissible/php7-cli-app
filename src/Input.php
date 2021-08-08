@@ -16,7 +16,7 @@ class Input
         }
 
         if (isset($default) || isset($placeholder)) {
-            $placeholder = $placeholder ? $placeholder . ':' : '';
+            $placeholder = $placeholder ? $placeholder . ($default ? ':' : '') : '';
             $default ??= '';
             
             // Separate provided suffix

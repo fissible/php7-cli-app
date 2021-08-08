@@ -613,7 +613,13 @@ class Str
     public static function _split($input)
     {
         // Split a string (unicode/UTF8 support), do not split after color control codes, eg \033[0;31m
-        return preg_split('#\\e[[][A-Za-z0-9];?[0-9]*m(*SKIP)(*F)|#u', $input, -1, PREG_SPLIT_NO_EMPTY);
+        $plit = preg_split('#\\e[[][A-Za-z0-9];?[0-9]*m(*SKIP)(*F)|#u', $input, -1, PREG_SPLIT_NO_EMPTY);
+
+        if (false === $plit) {
+            return mb_str_split($input);
+        }
+
+        return $plit;
     }
 
     public static function _studly($input)

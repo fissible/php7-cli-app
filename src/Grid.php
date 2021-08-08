@@ -206,34 +206,37 @@ class Grid
             throw new \InvalidArgumentException('Query must be a scalar.');
         }
 
-        $value = $value . '';
+        $value = (string) $value;
 
         if (strlen($value) < 1) {
             return null;
         }
 
+        $valueArr = Str::split($value);
+
         $coords = null;
         $pointer = 0;
-        $_char = $value[0];
+        $_char = $valueArr[0];
         $matching = false;
 
         foreach ($this->data as $y => $row) {
             foreach ($row as $x => $char) {
-                if ($char === $_char) {
+                if (is_null($char)) $char = ' ';
+                if (ord($char) === ord($_char)) {
                     if (!$matching) {
                         $matching = true;
                         $coords = [$y, $x];
                     }
                     $pointer++;
-                    if (isset($value[$pointer])) {
-                        $_char = $value[$pointer];
+                    if (isset($valueArr[$pointer])) {
+                        $_char = $valueArr[$pointer];
                     } else {
                         break(2);
                     }
                 } else {
                     $coords = null;
                     $pointer = 0;
-                    $_char = $value[0];
+                    $_char = $valueArr[0];
                     $matching = false;
                 }
             }

@@ -37,7 +37,7 @@ class ScreenApplication extends Application
         $this->Views = new Collection();
 
         parent::__construct($options, ...$arguments);
-        // parent::screen();
+        parent::screen();
     }
 
     /**
@@ -75,24 +75,12 @@ class ScreenApplication extends Application
             $Command = $this->Command ?? null;
             while ($Command) {
                 try {
-                    // if ($View = $Command->View()) {
-                    //     $this->Screen->setView($View);
-                    //     $this->Screen->draw();
-                    // }
-
                     $Command = $Command->run();
-
                 } catch (ViewUpdateEvent $Event) {
-                    $this->Screen->setView($Event->View);
+                    $this->Screen->setView($Event->view);
                 } catch (RouteEvent $Event) {
                     $this->Route = $this->Router->getRoute($Event->route);
                     $Command = $this->Route->getAction();
-
-                     // runs Command bound to route name
-                    // $View = $this->route($Event->route, $Event->payload());
-                    // if ($View) {
-                    //     $this->Screen->setView($View);
-                    // }
                 }
             }
         } catch (Event $Event) {
@@ -129,11 +117,16 @@ class ScreenApplication extends Application
         return $Menu;
     }
 
-    public function registerView(string $name, string $template, array $data = [], $config = null): self
+    public function registerView(string $name, array $templates, array $data = [], $config = null): self
     {
-        $this->Views->set($name, $this->getScreen()->makeView($template, $data, $config));
+        $this->Views->set($name, $this->getScreen()->makeView($name, $templates, $data, $config));
 
         return $this;
+    }
+
+    public function setView(string $name)
+    {
+        $this->getScreen()->setView($this->view('FullSize'));
     }
 
     public function view(string $name): ?View
@@ -167,8 +160,6 @@ class ScreenApplication extends Application
         if ($Component = $this->Screen->getComponent($componentName)) {
             $Component->appendContent($content, $newline);
             $this->Screen->draw();
-        } else {
-            throw new \Error(sprintf('Error finding the "%s" component.', $componentName));
         }
     }
 
@@ -195,7 +186,12 @@ class ScreenApplication extends Application
         return $lines;
     }
 
-    public function clearComponentContent(string $componentName = 'cursor'): self
+    /**
+     * Clear the Component content.
+     * 
+     * @param string $componentName
+     */
+    public function clearComponentContent(string $componentName): self
     {
         $this->setComponentContent($componentName, '');
         return $this;
@@ -204,27 +200,28 @@ class ScreenApplication extends Application
     /**
      * Check if the Component has content.
      * 
-     * @param string $name
+     * @param string $componentName
      * @return bool
      */
-    public function componentHasContent(string $name): bool
+    public function componentHasContent(string $componentName): bool
     {
-        if ($this->hasComponent($name)) {
-            return $this->getComponent($name)->hasContent();
+        if ($this->hasComponent($componentName)) {
+            return $this->getComponent($componentName)->hasContent();
         }
         return false;
     }
 
+    /**
+     * Set (overwrite) the Component content.
+     * 
+     * @param string $componentName
+     * @param string|Component $content
+     */
     public function setComponentContent(string $componentName = 'cursor', $content)
     {
-        // $this->clearComponentContent($componentName);
-
         if ($Component = $this->Screen->getComponent($componentName)) {
             $Component->setContent($content);
             $this->Screen->draw();
-        } else {
-            throw new \Error(sprintf('Error finding the "%s" component.', $componentName));
-            // $this->error(sprintf('Error finding the "%s" component.', $componentName));
         }
     }
 
@@ -237,7 +234,6 @@ class ScreenApplication extends Application
             Cursor::put(...$coords);
         } else {
             throw new \Error(sprintf('Error finding the "%s" component.', $componentName));
-            // $this->error(sprintf('Error finding the "%s" component.', $componentName));
         }
 
         return $this;
@@ -264,7 +260,7 @@ class ScreenApplication extends Application
      * @param array $messages
      * @return mixed
      */
-    public function prompt(?string $prompt = null, $default = null, array $rules = [], array $messages = [], string $defaultLabel = null)
+    public function prompt(?string $prompt = null, $default = null, array $rules = [], array $messages = [], string $placeholder = null)
     {
         $this->setCursor();
 
@@ -272,7 +268,7 @@ class ScreenApplication extends Application
             $prompt = $this->defaultPrompt;
         }
 
-        $prompt = Input::prepare_prompt($prompt, $default, $defaultLabel);
+        $prompt = Input::prepare_prompt($prompt, $default, $placeholder);
         $validator = empty($rules) ? null : Input::validator($rules, $messages);
 
         return $this->input = Input::prompt($prompt, $default, $validator, true);
@@ -359,7 +355,7 @@ class ScreenApplication extends Application
 
         // $this->mainMenu();
 
-        if ($Component = $this->View->getComponent('cursor')) {
+        if ($Component = $this->Screen->getComponent('cursor')) {
             [$y, $x] = $Component->getContentCoords();
             Cursor::put($y, $x);
         }
@@ -454,7 +450,7 @@ class ScreenApplication extends Application
         return $this->viewsPath;
     }
 
-    protected function setViewsPath(string $path)
+    public function setViewsPath(string $path)
     {
         $this->viewsPath = $path;
     }

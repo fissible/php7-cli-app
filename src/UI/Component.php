@@ -44,14 +44,14 @@ class Component
 
     // private View $View;
 
-    public function __construct(View $View, string $name, int $x = 0, int $y = 0, int $width = 1, int $height = 1)
+    public function __construct(string $name, int $x = 0, int $y = 0, int $width = 1, int $height = 1, array $styles = [])
     {
         $this->name = $name;
         $this->x = $x;
         $this->y = $y;
         $this->setWidth($width);
         $this->setHeight($height);
-        $this->setConfig($this->getStyles($View->config()));
+        $this->setConfig($this->getStyles($styles));
     }
 
     public function appendContent(string $content, bool $newline = true)
@@ -411,6 +411,11 @@ class Component
         }
     }
 
+    /**
+     * Set the content.
+     * 
+     * @param string|Component $content
+     */
     public function setContent($content = '')
     {
         if (!is_string($content) && !($content instanceof Component)) {
@@ -463,66 +468,18 @@ class Component
         return isset($this->$name);
     }
 
-    private function getStyles(Config $viewConfig): \stdClass
+    private function getStyles(array $styles = []): \stdClass
     {
-        $thisStylesKey = sprintf('styles.%s', $this->name);
-
         $config = new \stdClass;
 
-        foreach ($viewConfig->getData() as $key => $value) {
-            if ($key === 'styles') continue;
-            $config->$key = $value;
-        }
-
         foreach ($this->defaults as $key => $value) {
             if (!isset($config->$key)) {
                 $config->$key = $value;
             }
         }
 
-        if ($viewConfig->has($thisStylesKey)) {
-            foreach (Arr::fromObject($viewConfig->get($thisStylesKey)) as $key => $value) {
-                $config->$key = $value;
-            }
-        }
-
-        if (!isset($config->padding) && $viewConfig->has('padding')) {
-            $config->padding = intval($viewConfig->get('padding'));
-        }
-
-        if (!isset($config->border) && $viewConfig->has('border')) {
-            $config->border = $viewConfig->border;
-        }
-
-        return $config;
-
-
-        ///////////
-
-
-        if ($viewConfig->has($thisStylesKey)) {
-            $config = $viewConfig->get($thisStylesKey);
-        } else {
-            $config = Arr::toObject($this->defaults);
-        }
-
-        foreach ($viewConfig->getData() as $key => $value) {
-            if ($key === 'styles') continue;
+        foreach ($styles as $key => $value) {
             $config->$key = $value;
-        }
-
-        foreach ($this->defaults as $key => $value) {
-            if (!isset($config->$key)) {
-                $config->$key = $value;
-            }
-        }
-
-        if (!isset($config->padding) && $viewConfig->has('padding')) {
-            $config->padding = intval($viewConfig->get('padding'));
-        }
-
-        if (!isset($config->border) && $viewConfig->has('border')) {
-            $config->border = $viewConfig->border;
         }
 
         return $config;

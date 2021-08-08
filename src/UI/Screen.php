@@ -16,9 +16,13 @@ class Screen
 
     private ScreenApplication $Application;
 
-    private View $View;
+    protected Collection $Views;
 
     private Collection $Components;
+
+    private array $variables;
+
+    private View $View;
 
     private array $content;
 
@@ -32,15 +36,6 @@ class Screen
         return $this->Application;
     }
 
-    public function component(string $name, int $x = 0, int $y = 0, int $width = 1, int $height = 1): Component
-    {
-        $Component = new Component($this->View, $name, $x, $y, $width, $height);
-
-        $this->View->setComponent($Component);
-
-        return $this->getComponent($name);
-    }
-
     /**
      * Check if the Component has content.
      * 
@@ -49,8 +44,8 @@ class Screen
      */
     public function componentHasContent(string $name): bool
     {
-        if ($this->hasComponent($name)) {
-            return $this->getComponent($name)->hasContent();
+        if ($this->hasComponent($name, $this->height(), $this->width())) {
+            return $this->getComponent($name, $this->height(), $this->width())->hasContent();
         }
         return false;
     }
@@ -64,22 +59,20 @@ class Screen
         }
 
         // Print each line of the rendered View.
-        if (isset($this->View)) {
+        $View = $this->getView();
+        Cursor::hide();
 
-            Cursor::hide();
+        $lines = array_map(function ($row) {
+            return implode(array_map(function ($char) {
+                if ($char === null) return ' ';
+                return $char;
+            }, $row));
+        }, $View->render($this->height(), $this->width())->toArray());
 
-            $lines = array_map(function ($row) {
-                return implode(array_map(function ($char) {
-                    if ($char === null) return ' ';
-                    return $char;
-                }, $row));
-            }, $this->View->render()->toArray());
+        $this->Application->output->lines($lines);
 
-            $this->Application->output->lines($lines);
-
-            Cursor::put(0, 0);
-            Cursor::show();
-        }
+        Cursor::put(0, 0);
+        Cursor::show();
     }
 
     /**
@@ -90,35 +83,53 @@ class Screen
      */
     public function getComponent(string $name): ?Component
     {
-        return $this->View->getComponent($name);
+        return $this->getView()->getComponent($name, $this->height(), $this->width());
     }
 
     public function hasComponent(string $name): bool
     {
-        return $this->View->hasComponent($name);
+        return $this->getView()->hasComponent($name, $this->height(), $this->width());
     }
 
-    public function getView(): ?View
+    public function getView(): View
     {
-        if (isset($this->View)) {
-            return $this->View;
+        return $this->View;
+    }
+
+    // public function makeComponent(string $name, int $x = 0, int $y = 0, int $width = 1, int $height = 1): Component
+    // {
+    //     $Component = new Component($name, $x, $y, $width, $height);
+
+    //     $this->View->setComponent($Component);
+
+    //     return $this->getComponent($name);
+    // }
+
+    public function makeView(string $viewName, array $templateNames = [], array $data = [], $config = null): View
+    {
+        $Files = [];
+        $name = null;
+
+        foreach ($templateNames as $name) {
+            $name = str_replace('.txt', '', $name);
+            $File = new ViewTemplate($this->Application->viewsPath() . '/' . $name . '.txt');
+
+            if (!$File->exists()) {
+                throw new \InvalidArgumentException(sprintf('ViewTemplate does not exist at path \'%s\'', $File->path));
+            }
+
+            $Files[] = $File;
         }
 
-        return null;
-    }
+        $View = new View($viewName, $data, $Files, $config);
 
-    public function makeView(string $name = null, array $data = [], $config = null): View
-    {
-        $name = str_replace('.txt', '', $name);
-        $File = new File($this->Application->viewsPath() . '/' . $name . '.txt', File::EXISTS_READ_ONLY);
-
-        return new View($data, $File, $config);
+        return $View;
     }
 
     public function setContent($content): self
     {
         if ($content instanceof View) {
-            $content = $content->render();
+            $content = $content->render($this->height(), $this->width());
         }
 
         if (!is_array($content)) {
@@ -130,23 +141,6 @@ class Screen
         return $this;
     }
 
-    public function view(string $name, array $data = [], $config = null): View
-    {
-        if (!empty($data) || $config) {
-            if (empty($data) && isset($this->View)) {
-                $data = $this->View->data();
-            }
-
-            if (is_null($config) && isset($this->View)) {
-                $config = $this->View->config();
-            }
-
-            $this->View = $this->makeView($name, $data, $config);
-        }
-
-        return $this->View;
-    }
-
     public function setData(string $key, $value)
     {
         $this->getView()->$key = $value;
@@ -156,13 +150,15 @@ class Screen
     {
         $this->View = $View;
 
+        $this->Components = $View->getComponents();
+
         return $this;
     }
 
     /**
      * Height of current console
      */
-    public static function height()
+    public static function height(): int
     {
         return static::rows();
     }
@@ -170,23 +166,23 @@ class Screen
     /**
      * Width of current console
      */
-    public static function cols()
+    public static function cols(): int
     {
-        return Output::rtput('cols');
+        return (int) Output::rtput('cols')[0];
     }
 
     /**
      * Height of current console
      */
-    public static function rows()
+    public static function rows(): int
     {
-        return Output::rtput('lines');
+        return (int) Output::rtput('lines')[0];
     }
 
     /**
      * Width of current console
      */
-    public static function width()
+    public static function width(): int
     {
         return static::cols();
     }
