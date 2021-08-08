@@ -62,7 +62,7 @@ class TableHeader
 
     public function setDisplay(string $display): self
     {
-        if ($display !== ' ') {
+        if (!empty($display) && $display !== ' ') {
             if ($display[0] === ' ' && $display[-1] === ' ') {
                 $this->setAlignment(self::ALIGN_CENTER);
             } elseif ($display[0] === ' ') {

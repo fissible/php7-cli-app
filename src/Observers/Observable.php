@@ -3,10 +3,11 @@
 namespace PhpCli\Observers;
 
 use PhpCli\Collection;
+use PhpCli\Facades\Log;
 
 trait Observable {
 
-    private Collection $Observers;
+    protected Collection $Observers;
 
     public function __construct()
     {

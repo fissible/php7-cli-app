@@ -151,7 +151,6 @@ class Validator
      */
     public function setRules(iterable $rules): self
     {
-
         $this->rules = $this->normalizeRules($rules);
 
         return $this;
@@ -221,7 +220,6 @@ class Validator
      */
     protected function getValidatedRule($rule): Rule
     {
-
         if ($rule instanceof Rule) {
             return $rule;
         }
@@ -232,7 +230,7 @@ class Validator
 
 
         if (!is_string($rule)) {
-            throw new InvalidArgumentException('Invalid rule.');
+            throw new \InvalidArgumentException('Invalid rule.');
         }
 
         if (false !== strpos($rule, ':')) {

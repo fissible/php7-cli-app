@@ -31,6 +31,19 @@ class Menu
         }
     }
 
+    /**
+     * @param string $name
+     * @return string|null
+     */
+    public function getDescription(string $name): ?string
+    {
+        if (!array_key_exists($name, $this->getItems())) {
+            return null;
+        }
+
+        return $this->getItems()[$name];
+    }
+
     public function getItems(): array
     {
         $first = reset($this->items);
@@ -45,17 +58,37 @@ class Menu
         return $this->items;
     }
 
-    /**
-     * @param string $name
-     * @return string|null
-     */
-    public function getDescription(string $name): ?string
+    public function getList(): array
     {
-        if (!array_key_exists($name, $this->getItems())) {
-            return null;
+        $items = $this->items;
+
+        // Increment array keys by 1 if 0-indexed
+        if (key($items) === 0 && (!is_array($items[0]) || key($items[0]) === 0)) {
+            $items = $this->reKey($items, function ($key) {
+                return $key + 1;
+            });
         }
 
-        return $this->getItems()[$name];
+        $rows = [];
+        $first = reset($items);
+        if (is_array($first)) {
+            foreach ($items as $row) {
+                $rows[] = array_map(function ($command, $description) {
+                    return sprintf(' [%s] %s', $command, $description);
+                }, array_keys($row), $row);
+            }
+        } else {
+            foreach ($items as $command => $description) {
+                $rows[] = sprintf(' [%s] %s', $command, $description);
+            }
+        }
+
+        return $rows;
+    }
+
+    public function name(): string
+    {
+        return md5(print_r($this->items, true));
     }
 
     /**
@@ -130,25 +163,11 @@ class Menu
      */
     public function list(): self
     {
-        $items = $this->items;
-
-        // Increment array keys by 1 if 0-indexed
-        if (key($items) === 0 && (!is_array($items[0]) || key($items[0]) === 0)) {
-            $items = $this->reKey($items, function ($key) {
-                return $key + 1;
-            });
-        }
+        $items = $this->getList();
 
         $first = reset($items);
         if (is_array($first)) {
-            $rows = [];
-            foreach ($items as $row_key => $row) {
-                $rows[] = array_map(function ($command, $description) {
-                    return sprintf(' [%s] %s', $command, $description);
-                }, array_keys($row), $row);
-            }
-
-            $this->Application->table([], $rows, Table::borderPreset('none'))->print();
+            $this->Application->table([], $items, Table::borderPreset('none'))->print();
         } else {
             foreach ($items as $command => $description) {
                 $this->Application->output->linef(' [%s] %s', $command, $description);
@@ -215,5 +234,10 @@ class Menu
     {
         $this->returnValue = $bool;
         return $this;
+    }
+
+    public function __toString()
+    {
+        return implode("\n", $this->getList());
     }
 }

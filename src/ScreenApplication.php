@@ -10,6 +10,7 @@ use PhpCli\Events\ViewUpdateEvent;
 use PhpCli\Exceptions\MissingArgumentException;
 use PhpCli\Str;
 use PhpCli\stty;
+use PhpCli\Facades\Log;
 use PhpCli\Traits\RequiresBinary;
 use PhpCli\UI\Component;
 use PhpCli\UI\Screen;
@@ -96,6 +97,12 @@ class ScreenApplication extends Application
             }
         } catch (Event $Event) {
             $this->output->linef('Unhandled Event<%s>', get_class($Event));
+        } catch (\Throwable $e) {
+            Log::error($e->getMessage());
+            Log::error($e->getFile() . ':' . $e->getLine());
+            Log::error($e->getTraceAsString());
+
+            throw $e;
         }
     }
 
@@ -150,6 +157,11 @@ class ScreenApplication extends Application
         return $this->Screen;
     }
 
+    public function hasComponent(string $name): bool
+    {
+        return $this->Screen->hasComponent($name);
+    }
+
     public function appendComponentContent(string $componentName, $content, bool $newline = true)
     {
         if ($Component = $this->Screen->getComponent($componentName)) {
@@ -189,6 +201,20 @@ class ScreenApplication extends Application
         return $this;
     }
 
+    /**
+     * Check if the Component has content.
+     * 
+     * @param string $name
+     * @return bool
+     */
+    public function componentHasContent(string $name): bool
+    {
+        if ($this->hasComponent($name)) {
+            return $this->getComponent($name)->hasContent();
+        }
+        return false;
+    }
+
     public function setComponentContent(string $componentName = 'cursor', $content)
     {
         // $this->clearComponentContent($componentName);
@@ -220,6 +246,101 @@ class ScreenApplication extends Application
     public function setData(string $key, $value)
     {
         $this->Screen->setData($key, $value);
+    }
+
+    /**
+     * Input/Output
+     */
+
+     public function inlinePrompt(?string $prompt = null, $default = null, array $rules = [], array $messages = [])
+     {
+         return parent::prompt($prompt, $default, $rules, $messages);
+     }
+
+    /**
+     * @param string|null $prompt
+     * @param mixed $default
+     * @param array $rules
+     * @param array $messages
+     * @return mixed
+     */
+    public function prompt(?string $prompt = null, $default = null, array $rules = [], array $messages = [], string $defaultLabel = null)
+    {
+        $this->setCursor();
+
+        if (is_null($prompt)) {
+            $prompt = $this->defaultPrompt;
+        }
+
+        $prompt = Input::prepare_prompt($prompt, $default, $defaultLabel);
+        $validator = empty($rules) ? null : Input::validator($rules, $messages);
+
+        return $this->input = Input::prompt($prompt, $default, $validator, true);
+    }
+
+    public function promptDate(?string $prompt = null, string $format = 'mm/dd/yyyy', ?string $default = null, array $rules = [], array $messages = []): ?\DateTime
+    {
+        if (is_null($prompt)) {
+            $prompt = 'Enter date (#format): ';
+        }
+
+        if (false !== strpos($prompt, '#format')) {
+            $prompt = str_replace('#format', $format, $prompt);
+        }
+
+        $rules[] = 'date:' . $format;
+
+        if ($default) {
+            $default = (new \DateTime($default))->format($format);
+        }
+
+        if ($input = $this->prompt($prompt, $default, $rules, $messages)) {
+            return \DateTime::createFromFormat($format, $input);
+        }
+
+        return $default;
+    }
+
+    /**
+     * @param string $prompt
+     * @return string
+     */
+    public function promptSecret(string $prompt): string
+    {
+        $this->setCursor();
+
+        return Input::promptSecret($prompt);
+    }
+
+    /**
+     * Prompt for username and password on the command line.
+     *  list($username, $password) = $this->promptUsernamePassword();
+     * 
+     * @param null|string $usernamePrompt
+     * @param null|string $passwordPrompt
+     * @return array
+     */
+    public function promptUsernamePassword(?string $usernamePrompt = null, ?string $passwordPrompt = null)
+    {
+        $username = $this->prompt($usernamePrompt ?? 'What is your username? ');
+        $password = $this->promptSecret($passwordPrompt ?? 'What is your password? ');
+        return [$username, $password];
+    }
+
+    /**
+     * @param string $prompt
+     * @param string|null $default
+     * @return bool
+     */
+    public function promptYesNo(string $prompt, ?bool $default = false): ?bool
+    {
+        $response = $this->prompt($prompt, $default ? 'y' : 'n', ['required']);
+
+        if (is_string($response)) {
+            return strtolower(substr($response, 0, 1)) === 'y';
+        }
+
+        return $default;
     }
 
     /**
@@ -281,9 +402,22 @@ class ScreenApplication extends Application
     {
         // Remove suffix from original prompt (user must do this if it differs from the new suffix provided)
         $prompt = rtrim(str_replace($suffix, '', $prompt));
-        $prompt = sprintf('%s %s <%s>%s', $prompt, $priorInput, $placeholder, $suffix);
+        $prompt = sprintf('%s %s %s', $prompt, $priorInput, $suffix);
 
-        return $this->prompt($prompt, $default, $rules, $messages);
+        return $this->prompt($prompt, $default, $rules, $messages, $placeholder);
+    }
+
+    /**
+     * Convenience method to wait for the user to press a key.
+     * 
+     * @param string $message
+     */
+    public function wait(string $message = '[Enter to return]')
+    {
+        $this->setCursor();
+        Cursor::hide();
+        $this->prompt(Output::color($message, 'blue'));
+        Cursor::show();
     }
 
     // protected function handle(Event $Event)

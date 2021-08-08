@@ -54,6 +54,20 @@ class View
     }
 
     /**
+     * Check if the Component has content.
+     * 
+     * @param string $name
+     * @return bool
+     */
+    public function componentHasContent(string $name): bool
+    {
+        if ($this->hasComponent($name)) {
+            return $this->getComponent($name)->hasContent();
+        }
+        return false;
+    }
+
+    /**
      * Get the view data.
      * 
      * @return array
@@ -210,7 +224,6 @@ class View
         ];
 
         $this->Components->each(function (Component $Component) use ($variant, $borderChars) {
-
             // Erase the Component ID string
             $componentId = '#'.$Component->name;
             if ($coords = $this->view->find($componentId)) {
@@ -223,10 +236,7 @@ class View
             }
 
             // Map the content into the view
-            $borders = $Component->getBorder();
-            $padding = $Component->getPadding();
-            $vpadding = $Component->getVerticalPadding();
-            $lines = $Component->render(true);
+            $lines = $Component->render();
 
             foreach ($lines as $y => $line) {
                 $chars = Str::split($line);
@@ -236,14 +246,15 @@ class View
                     $newX = $Component->x + $x;
 
                     if ($this->view->valid($newY, $newX)) {
+                        $currChar = $this->view->get($newY, $newX);
                         // check for intersecting borders
                         if (in_array($char, array_values($borderChars))) {
-                            $currChar = $this->view->get($newY, $newX);
                             if (in_array($currChar, array_values($borderChars))) {
                                 $char = Output::combine_lines($currChar, $char, $variant);
                             }
+                        } elseif (!empty($currChar) && empty($char)) {
+                            continue;
                         }
-
                         $this->view->set($newY, $newX, $char);
                     } else {
                         throw new \Exception(sprintf('y: %d x: %d, invalid coordinates', $newY, $newX));
@@ -251,8 +262,6 @@ class View
                 }
             }
         });
-
-        // return $lines;
     }
 
     /**
@@ -264,11 +273,10 @@ class View
     private function replaceVariables()
     {
         foreach ($this->variables as $key => $coords) {
-            if (!isset($this->data[$key])) {
-                continue;
+            $value = '';
+            if (isset($this->data[$key])) {
+                $value = $this->data[$key];
             }
-
-            $value = $this->data[$key];
 
             if (!is_string($value)) {
                 if (!is_scalar($value)) {
@@ -283,15 +291,13 @@ class View
             foreach ($lines as $y => $line) {
                 $chars = Str::split($line);
                 foreach ($chars as $x => $char) {
-                    if ($char === ' ') $char = null;
+                    // if ($char === ' ') $char = null;
                     if ($this->view->valid($coords[0] + $y, $coords[1] + $x)) {
                         $this->view->set($coords[0] + $y, $coords[1] + $x, $char);
                     }
                 }
             }
         }
-
-        // return $lines;
     }
 
     /**
@@ -308,20 +314,23 @@ class View
         $this->replaceComponents();
         $this->replaceVariables();
 
-        // color the borders
-        if ($this->Config->has('border-color')) {
-
-            $unicodeBorderChars = [
-                'hor', 'ver', 'down_right', 'down_left', 'up_right', 'up_left', 'ver_right', 'ver_left', 'down_hor', 'up_hor', 'cross'
-            ];
-            foreach ($unicodeBorderChars as $char) {
-                while ($coords = $this->view->find($char)) {
-                    $this->view->set($coords[0], $coords[1], Output::color($char, $this->Config->get('border-color')));
-                }
-            }
-        }
-
         return $this->view;
+    }
+
+    /**
+     * @return int
+     */
+    public function width(): int
+    {
+        return $this->view->width();
+    }
+
+    /**
+     * @return int
+     */
+    public function height(): int
+    {
+        return $this->view->height();
     }
 
 
@@ -368,65 +377,138 @@ class View
     {
         $startCoords = [];
         $stopCoords = [];
-        $variant = $this->borderVariant();
-
-        // Output::printIndexedArray($view);
+        $variant = 'light'; // Templates must use the light variant @todo consider using simple (non-unicode) instead
 
         // find "#..." string coords
         if ($coords = $this->view->find($componentId)) {
             $this->view->pointer(...$coords); // coords of "#"
 
             $startChars = [
-                Output::uchar('down_right', $variant, true),
-                Output::uchar('down_hor', $variant, true),
-                Output::uchar('ver_right', $variant, true),
-                Output::uchar('cross', $variant, true)
+                Output::uchar('down_right', $variant, true), // ┌
+                Output::uchar('down_hor', $variant, true),   // ┬
+                Output::uchar('ver_right', $variant, true),  // ├
+                Output::uchar('cross', $variant, true)       // ┼
             ];
 
-            $foundEdge = false;
+            $stopChars = [
+                Output::uchar('up_hor', $variant, true),     // ┴
+                Output::uchar('ver_left', $variant, true),   // ┤
+                Output::uchar('up_left', $variant, true),    // ┘
+                Output::uchar('cross', $variant, true)       // ┼
+            ];
+
+            $startCoords = [];
+
+            // Find start up then left
+            $foundEdge = 0;
             while (!in_array($this->view->peek(), $startChars)) {
-                if (!$foundEdge) {
-                    $foundEdge = ($this->view->peek() === Output::uchar('ver', $variant, true));
+                if ($foundEdge === 0 && $peek = $this->view->peek()) {
+                    if (Str::contains($peek, Output::uchar('hor', $variant, true))) {
+                        $foundEdge = 1;
+                    }
                 }
 
-                if ($foundEdge) {
+                if ($foundEdge === 0) {
                     $this->view->up();
                 } else {
                     $this->view->left();
                 }
             }
-            $startCoords = $this->view->pointer();
+            $startCoords[] = $this->view->pointer();
+
+            $this->view->pointer(...$coords);
+
+
+            // Find start down, then left, then then up (because starting point is not centered in the component)
+            $foundEdge = 0;
+            while (!in_array($this->view->peek(), $startChars)) {
+                if ($foundEdge === 0 && $peek = $this->view->peek()) {
+                    if (Str::contains($peek, Output::uchar('hor', $variant, true))) {
+                        $foundEdge = 1;
+                    }
+                } elseif ($foundEdge === 1 && $peek = $this->view->peek()) {
+                    $canGoUp = [
+                        Output::uchar('up_right', $variant, true),
+                        Output::uchar('ver_right', $variant, true),
+                        Output::uchar('up_hor', $variant, true),
+                        Output::uchar('cross', $variant, true)
+                    ];
+                    foreach ($canGoUp as $char) {
+                        if (Str::contains($peek, $char)) {
+                            $foundEdge = 2;
+                            break;
+                        }
+                    }
+                }
+
+                if ($foundEdge === 0) {
+                    $this->view->down();
+                } elseif ($foundEdge === 1) {
+                    try {
+                        $this->view->left();
+                    } catch (\RangeException $e) {
+                        print "\npeeked: ".$this->view->peek()."\n";
+                        throw $e;
+                    }
+                } elseif ($foundEdge === 2) {
+                    $this->view->up();
+                } else {
+                    throw new \Exception('Found too many edges.');
+                }
+            }
+            $startCoords[] = $this->view->pointer();
 
             if (empty($startCoords)) {
                 throw new \Exception(sprintf('%s: Unable to locate bounding box start delimiter.', $componentId));
             }
 
+            $startCoords = [min($startCoords[0][0], $startCoords[1][0]), min($startCoords[0][1], $startCoords[1][1])];
+
             $this->view->pointer(...$coords);
 
-            $stopChars = [
-                Output::uchar('up_hor', $variant, true),
-                Output::uchar('ver_left', $variant, true),
-                Output::uchar('up_left', $variant, true),
-                Output::uchar('cross', $variant, true)
-            ];
+            $stopCoords = [];
 
-            $foundEdge = false;
+            // Find stop down then right
+            $foundEdge = 0;
             while (!in_array($this->view->peek(), $stopChars)) {
-                if (!$foundEdge) {
-                    $foundEdge = ($this->view->peek() === Output::uchar('ver', $variant, true));
+                if (!$foundEdge && $peek = $this->view->peek()) {
+                    if (Str::contains($peek, Output::uchar('hor', $variant, true))) {
+                        $foundEdge = 1;
+                    }
                 }
 
-                if ($foundEdge) {
+                if ($foundEdge === 0) {
                     $this->view->down();
                 } else {
                     $this->view->right();
                 }
             }
-            $stopCoords = $this->view->pointer();
+            $stopCoords[] = $this->view->pointer();
+
+            $this->view->pointer(...$coords);
+
+            // Find stop right then down
+            $foundEdge = 0;
+            while (!in_array($this->view->peek(), $stopChars)) {
+                if (!$foundEdge && $peek = $this->view->peek()) {
+                    if (Str::contains($peek, Output::uchar('ver', $variant, true))) {
+                        $foundEdge = 1;
+                    }
+                }
+
+                if ($foundEdge === 0) {
+                    $this->view->right();
+                } else {
+                    $this->view->down();
+                }
+            }
+            $stopCoords[] = $this->view->pointer();
 
             if (empty($stopCoords)) {
                 throw new \Exception(sprintf('%s: Unable to locate bounding box stop delimiter.', $componentId));
             }
+
+            $stopCoords = [max($stopCoords[0][0], $stopCoords[1][0]), max($stopCoords[0][1], $stopCoords[1][1])];
         } else {
             throw new \Exception(sprintf('%s: Unable to locate component identifier.', $componentId));
         }
@@ -436,7 +518,6 @@ class View
 
     private function borderVariant(): string
     {
-        // @todo - auto-detect variant from File data
         return $this->Config->get('border-style') ?? 'light';
     }
 
@@ -449,7 +530,7 @@ class View
     {
         $this->Components = new Collection();
         $lines = $this->getLines();
-        $string = implode("\n", $lines);
+        $string = '';
         $grid = [];
 
         foreach ($lines as $row) {
@@ -461,6 +542,10 @@ class View
 
         $this->view = new Grid($grid);
         $this->variables = [];
+
+        unset($grid);
+        $string = implode("\n", $lines);
+        unset($lines);
         $variables = static::getVariableNames($string);
         foreach ($variables as $name) {
             $this->variables[$name] = $this->getVariableCoords($name);

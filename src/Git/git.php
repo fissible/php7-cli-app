@@ -96,6 +96,9 @@ class git {
     {
         $bin = static::bin();
 
+        // $Logger = \PhpCli\Reporting\Drivers\FileLogger::create((object) ['driver' => 'file', 'path' => '/private/tmp/gitlog.log']);
+        // $Logger->info("CMD: git " . $command);
+
         // print "\nCMD: git ".$command."\n";
         exec($bin.' '.$command.' 2>&1', $output, static::$result_code);
 

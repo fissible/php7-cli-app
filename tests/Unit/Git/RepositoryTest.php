@@ -69,6 +69,38 @@ class RepositoryTest extends TestCase {
         $this->assertTrue($Repo->delete());
     }
 
+    public function testGetValidatedCloneParameters()
+    {
+        $source_repo_path = dirname(__FILE__) . '/cloneRepo';
+        $SourceRepo = new Repository($source_repo_path);
+        $repo_path = dirname(__FILE__) . '/newRepo';
+        $Repo = new Repository($repo_path);
+
+        [$repository, $directory, $destination] = $Repo->getValidatedCloneParameters('.', 'clone_dir');
+
+        $this->assertEquals($Repo->path(), $repository);
+        $this->assertEquals('clone_dir', $directory);
+        $this->assertEquals($Repo->path('clone_dir'), $destination);
+
+        [$repository, $directory, $destination] = $Repo->getValidatedCloneParameters('./');
+
+        $this->assertEquals($Repo->path(), $repository);
+        $this->assertEquals('newRepo_copy', $directory);
+        $this->assertEquals($Repo->path('newRepo_copy'), $destination);
+
+        [$repository, $directory, $destination] = $Repo->getValidatedCloneParameters('https://github.com/ajthenewguy/php7-matrix');
+
+        $this->assertEquals('https://github.com/ajthenewguy/php7-matrix', $repository);
+        $this->assertEquals(null, $directory);
+        $this->assertEquals($Repo->path('php7-matrix'), $destination);
+
+        [$repository, $directory, $destination] = $Repo->getValidatedCloneParameters('https://github.com/ajthenewguy/php7-matrix', 'php_matrix');
+
+        $this->assertEquals('https://github.com/ajthenewguy/php7-matrix', $repository);
+        $this->assertEquals('php_matrix', $directory);
+        $this->assertEquals($Repo->path('php_matrix'), $destination);
+    }
+
     public function testInit()
     {
         $Repo = new Repository(dirname(__DIR__));

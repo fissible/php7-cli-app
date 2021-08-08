@@ -783,6 +783,11 @@ Array
         return $name;
     }
 
+    public function hasChanges(): bool
+    {
+        return $this->Stage->hasChanges();
+    }
+
     public function head(): ?Commit
     {
         $output = git::rev_parse('HEAD');
@@ -855,7 +860,15 @@ Array
         return $commits;
     }
 
-    public function merge(...$branches)
+    /**
+     * Merge a branch into the checked out branch. If more than one
+     * branch name is supplied, an octopus merge is automatically
+     * attempted. Any merge conflicts will cause an octopus merg to fail.
+     * 
+     * @param string[] $branches
+     * @return self
+     */
+    public function merge(...$branches): self
     {
         $args = array_map(function ($branch) {
             if ($branch instanceof Branch) {
@@ -871,32 +884,6 @@ Array
 
         $this->_log(git::merge(...$args));
 
-        // print_r($output);
-        /*
-git merge development
-Array
-(
-    [0] => Removing portal/database/migrations/2021_04_20_123302_POR-765.php
-    [1] => Removing database/POR-765.sql
-    [2] => git hook .git/hooks/commit-msg
-    [3] => --------------------------------
-    [4] => Merge made by the 'recursive' strategy.
-    [5] =>  database/POR-765.sql                               | 77 ----------------------
-    [6] =>  portal/VERSION                                     |  2 +-
-    [7] =>  .../Http/Controllers/Roster/IattfController.php    | 25 ++++++-
-    [8] =>  .../app/Http/Controllers/Roster/TcrController.php  | 25 ++++++-
-    [9] =>  portal/app_version.php                             |  2 +-
-    [10] =>  .../migrations/2021_04_20_123302_POR-765.php       | 33 ----------
-    [11] =>  .../views/roster/only-single-search.blade.php      | 15 +++++
-    [12] =>  portal/resources/views/roster/search.blade.php     | 38 ++++++-----
-    [13] =>  portal/routes/web.php                              |  4 ++
-    [14] =>  9 files changed, 90 insertions(+), 131 deletions(-)
-    [15] =>  delete mode 100644 database/POR-765.sql
-    [16] =>  delete mode 100644 portal/database/migrations/2021_04_20_123302_POR-765.php
-    [17] =>  create mode 100644 portal/resources/views/roster/only-single-search.blade.php
-)
-        */
-
         return $this;
     }
 
@@ -905,9 +892,6 @@ Array
         $output = git::merge('--abort');
 
         $this->_log($output);
-
-        print "\n".__METHOD__.':'.__LINE__;
-        print_r($output);
 
         return $this;
     }
@@ -954,22 +938,24 @@ Array
      * @param string $remoteBranch
      * @return self
      */
-    public function pull(?Remote $Remote = null, string $remoteBranch = null): self
+    public function pull(?Remote $Remote = null, string $remoteBranch = null, bool $autostash = false): self
     {
         $args = [];
 
         // has unstaged or staged changes?
         // @todo
+        // print ($this->Stage->hasChanges() ? "has changes" : "has no changes")."\n";
 
-        print "\n".__METHOD__.':'.__LINE__;
-        print ($this->Stage->hasChanges() ? "has changes" : "has no changes")."\n";
-        print_r($this->getStatus());
 
-        // $args = ['--rebase'];
+        if ($autostash) {
+            $args = ['--rebase'];
+            $args = ['--autostash'];
+        }
+
         $Remote ??= $this->remote();
 
         if (is_null($Remote)) {
-            throw new \Exception('No configured pull source (remote).');
+            throw new GitException('No configured pull source (remote).');
         }
 
         if ($remoteBranch) {
@@ -1063,10 +1049,6 @@ Array
         //     return $output[0];
         // }
 
-        if (git::result()) {
-            throw new \Exception('Error pulling from remote repository.');
-        }
-
         return $this;
     }
 
@@ -1076,13 +1058,13 @@ Array
      *
      * @param Remote|null $Remote
      * @param string|null $branch
-     * @param [type] $tags
+     * @param mixed $tags
      * @return self
      */
     public function push(?Remote $Remote = null, string $remoteBranch = null, $tags = null, bool $force = false): self
     {
         $args = [];
-        $branches = $this->branch()->name();
+        $branch = $this->branch()->name();
         $Remote ??= $this->remote();
         $stashed = false;
 
@@ -1102,11 +1084,11 @@ Array
 
         // $args[] = '--dry-run';
 
-        if (is_null($Remote)) {
-            throw new \Exception('No configured push destination (remote).');
-        }
+        // git push origin main:main
 
-        $args[] = $Remote->name();
+        if (is_null($Remote)) {
+            throw new GitException('No configured push destination (remote).');
+        }
 
         if (!is_null($tags)) {
             if ($tags === true) {
@@ -1124,14 +1106,12 @@ Array
             $args[] = $Remote->name();
 
             if ($remoteBranch === true) {
-                $args[] = $branches;
+                $args[] = $branch;
                 $args[] = 'HEAD';
             } else {
-                $branches .= ':'.$remoteBranch;
-                $args[] = $branches;
+                $branch .= ':'.$remoteBranch;
+                $args[] = $branch;
             }
-        } else {
-            $args[] = $branches;
         }
 
         $this->_log(git::push(...$args));
@@ -1160,10 +1140,6 @@ Array
         // if (isset($output[1]) && Str::contains($output[1], '[')) {
         //     return Str::capture($output[1], '[', ']');
         // }
-
-        if (git::result()) {
-            throw new \Exception('Error pushing to remote repository.');
-        }
 
         return $this;
     }
@@ -1376,6 +1352,25 @@ Array
         }
 
         return $output;
+    }
+
+    /**
+     * Reset a failed pull or merge.
+     */
+    public function reset(bool $hard = false, bool $merge = false)
+    {
+        $args = [];
+
+        if ($hard) {
+            $args[] = '--hard';
+        }
+
+        if ($merge) {
+            $args[] = '--merge';
+            $args[] = 'ORIG_HEAD';
+        }
+
+        $this->_log(git::reset(...$args));
     }
 
     /**

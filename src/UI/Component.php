@@ -12,6 +12,8 @@ class Component
 {
     use HasConfig;
 
+    public static $colorize = true;
+
     private string $name;
 
     private int $height;
@@ -35,6 +37,11 @@ class Component
         'x' => 0
     ];
 
+    private array $offsetMax = [
+        'y' => 0,
+        'x' => 0
+    ];
+
     // private View $View;
 
     public function __construct(View $View, string $name, int $x = 0, int $y = 0, int $width = 1, int $height = 1)
@@ -45,6 +52,15 @@ class Component
         $this->setWidth($width);
         $this->setHeight($height);
         $this->setConfig($this->getStyles($View->config()));
+    }
+
+    public function appendContent(string $content, bool $newline = true)
+    {
+        if ($newline) {
+            $content .= "\n";
+        }
+
+        $this->setContent(($this->content ?? '') . $content);
     }
 
     public function colorizeContent(array $lines): array
@@ -71,10 +87,13 @@ class Component
     {
         $border = 1;
         if (isset($this->config()->border)) {
-            if (filter_var($this->config()->border, FILTER_VALIDATE_INT|FILTER_VALIDATE_BOOLEAN)) {
-                $border = $this->config()->border ? 1 : 0;
-            } elseif ($this->config()->border === 'none') {
+            $border = $this->config()->border;
+            if ($border === 'none') {
                 $border = 0;
+            } elseif (is_numeric($border)) {
+                $border = boolval($border) ? 1 : 0;
+            } else {
+                $border = filter_var($border, FILTER_VALIDATE_BOOLEAN);
             }
         }
 
@@ -147,12 +166,14 @@ class Component
     /**
      * Format the 
      */
-    public function getFormattedContentLines(bool $color = false)
+    public function getFormattedContentLines(bool $refresh = false)
     {
-        if (!isset($this->formattedLines)) {
+        if (!isset($this->formattedLines) || $refresh) {
             $content = $this->content ?? '';
             $width = $this->getWidth();
             $height = $this->getHeight();
+            $padding = $this->getPadding();
+            $vpadding = $this->getVerticalPadding();
             $widest = 0;
 
             if ($content instanceof Component) {
@@ -165,22 +186,18 @@ class Component
                 $content = wordwrap($content, $width, "\n", true);
             }
 
+            // Convert content string into array of lines
             $lines = explode("\n", $content);
+
+            // Replace TABs with 4 spaces for consistency
             $lines = array_map(function ($input) {
                 return preg_replace('/\t/', '    ', $input);
             }, $lines);
 
-            // print_r(array_map(function ($line) {
-            //     return $line.' - ('.strlen($line).'|'.mb_strlen($line).'|'.Str::length($line).')';
-            // }, $lines));
-
-            if (!$color) {
+            // Strip control characters if color is disabled
+            if (!static::$colorize) {
                 $lines = array_map(function ($input) { return preg_replace('#\\x1b[[][^A-Za-z]*[A-Za-z]#', '', $input); }, $lines);
             }
-
-            // print_r(array_map(function ($line) {
-            //     return $line . ' - (' . strlen($line) . '|' . mb_strlen($line) . '|' . Str::length($line) . ')';
-            // }, $lines));
 
             // Justify the content
             if ($this->config()->has('align')) {
@@ -210,17 +227,29 @@ class Component
             //     return substr_replace(substr_replace($row, '|', 0, 1), '|', -1, 1);
             // }, $lines);
 
+            // Calculate the max offsets
+            $this->offsetMax['y'] = max(0, count($lines) - $height);
+            $this->offsetMax['x'] = 0;
 
-            // Trim columns to height
-            if (count($lines) > $height) {
-                $lines = array_slice($lines, $this->offset['y'], $height);
-            }
-
-            // get the longest row
-            foreach ($lines as $row) {
-                if (($len = Str::length($row)) > $widest) {
+            foreach ($lines as $line) {
+                if (($len = Str::length($line)) > $widest) {
                     $widest = $len;
                 }
+
+                $max = max(0, $len - $width);
+                if ($max > $this->offsetMax['x']) {
+                    $this->offsetMax['x'] = $max;
+                }
+            }
+
+            // Reduce current offsets if they exceed maximums
+            $this->offset['y'] = min($this->offset['y'], $this->offsetMax['y']);
+            $this->offset['x'] = min($this->offset['x'], $this->offsetMax['x']);
+
+            // Trim columns to height
+            $trimTo = $height - ($vpadding);
+            if (count($lines) > $height) {
+                $lines = array_slice($lines, $this->offset['y'], /*$height */ $trimTo);
             }
 
             // hidden, scroll (y), nowrap (scroll x+y)
@@ -249,7 +278,10 @@ class Component
     {
         $vpadding = 0;
         if ($padding = $this->getPadding()) {
-            $vpadding = intval($padding / 2);
+            $vpadding = intval($padding / 2.467);
+            if ($padding > 1 && $vpadding < 1) {
+                $vpadding = 1;
+            }
         }
 
         return $vpadding;
@@ -274,45 +306,52 @@ class Component
         throw new \InvalidArgumentException('Offset key must be "x" or "y".');
     }
 
+    public function hasContent(): bool
+    {
+        return isset($this->content) && !empty($this->content);
+    }
+
     public function name(): string
     {
         return $this->name;
     }
 
-    public function render(bool $colorize = false): array
+    public function render(): array
     {
         $border = $this->getBorder();
         $padding = $this->getPadding();
-        $vpadding = $this->getVerticalPadding();
+        $vpadding = $this->getVerticalPadding() ?: ($border ? 0 : 1);
         $height = $this->getHeight();
         $width = $this->getWidth();
         $pad = str_repeat(' ', $padding);
 
         // Convert content string into array of strings
-        $lines = $this->getFormattedContentLines($colorize);
-
-        // add horizontal padding to each row
-        $lines = array_map(function (string $row) use ($pad) {
-            return $pad . $row . $pad;
-        }, $lines);
-
-        // add vertical padding to rows
-        if ($vpadding > 0) {
-            // add padding rows: rows of spaces equal to longest row
-            for ($p = 0; $p < $vpadding; $p++) {
-                array_unshift($lines, '');
-                array_push($lines, '');
-            }
-        }
+        $lines = $this->getFormattedContentLines();
 
         // colorize content
-        if ($colorize) {
+        if (static::$colorize) {
             foreach ($lines as $key => $contentLine) {
                 if (empty($contentLine)) continue;
                 $lines[$key] = Output::color($contentLine, $this->config()->color);
             }
         }
 
+        // add horizontal padding to each row
+        $lines = array_map(function (string $row) use ($pad) {
+            return $pad . $row . $pad;
+        }, $lines);
+
+        $emptyRow = str_repeat(' ', $this->width - ($border * 2));
+        // add vertical padding to rows
+        if ($vpadding > 0) {
+            // add padding rows: rows of spaces equal to longest row
+            for ($p = 0; $p <= ($vpadding / 2); $p++) {
+                array_unshift($lines, $emptyRow);
+                array_push($lines, $emptyRow);
+            }
+        }
+
+        // Add borders
         if ($border) {
             $borderStyle = $this->config()->get('border-style');
             $verticalBorder = Output::uchar('ver', $borderStyle);
@@ -323,7 +362,7 @@ class Component
 
             array_unshift($lines, $topBorder);
 
-            for ($i = 1; $i <= $height; $i++) {
+            for ($i = 1; $i <= $this->height - 2; $i++) {
                 if (isset($lines[$i])) {
                     $lines[$i] = $verticalBorder . $lines[$i] . $verticalBorder;
                 } else {
@@ -340,14 +379,46 @@ class Component
         return $lines;
     }
 
+    public function scroll(string $direction, int $amount = 1)
+    {
+        $current = $this->offset;
+
+        switch ($direction) {
+            case 'up': // y--
+                $amount = min($amount, $this->offset['y']);
+
+                $this->offset['y'] -= $amount;
+                break;
+            case 'down': // y++
+                $amount = min($amount, $this->offsetMax['y']);
+
+                $this->offset['y'] += $amount;
+                break;
+            case 'left': // x--
+                $amount = min($amount, $this->offset['x']);
+
+                $this->offset['x'] -= $amount;
+                break;
+            case 'right': // x++
+                $amount = min($amount, $this->offsetMax['x']);
+
+                $this->offset['x'] += $amount;
+                break;
+        }
+
+        if ($this->offset !== $current) {
+            $this->getFormattedContentLines(true);
+        }
+    }
+
     public function setContent($content = '')
     {
         if (!is_string($content) && !($content instanceof Component)) {
             throw new \InvalidArgumentException(sprintf('Component content must be a string or a Component instance, "%s" given.', gettype($content)));
         }
 
-        $this->formattedLines = null;
         $this->content = $content;
+        $this->getFormattedContentLines(true);
     }
 
     public function setHeight(int $height): self
@@ -364,10 +435,10 @@ class Component
      * @param int $x
      * @return self
      */
-    public function setOffset(int $y, int $x): self
+    public function setOffset(int $y = null, int $x = null): self
     {
-        $this->offset['y'] = $y;
-        $this->offset['x'] = $x;
+        $this->offset['y'] = $y ?? $this->offset['y'] ?? 0;
+        $this->offset['x'] = $x ?? $this->offset['x'] ?? 0;
 
         return $this;
     }
@@ -395,6 +466,39 @@ class Component
     private function getStyles(Config $viewConfig): \stdClass
     {
         $thisStylesKey = sprintf('styles.%s', $this->name);
+
+        $config = new \stdClass;
+
+        foreach ($viewConfig->getData() as $key => $value) {
+            if ($key === 'styles') continue;
+            $config->$key = $value;
+        }
+
+        foreach ($this->defaults as $key => $value) {
+            if (!isset($config->$key)) {
+                $config->$key = $value;
+            }
+        }
+
+        if ($viewConfig->has($thisStylesKey)) {
+            foreach (Arr::fromObject($viewConfig->get($thisStylesKey)) as $key => $value) {
+                $config->$key = $value;
+            }
+        }
+
+        if (!isset($config->padding) && $viewConfig->has('padding')) {
+            $config->padding = intval($viewConfig->get('padding'));
+        }
+
+        if (!isset($config->border) && $viewConfig->has('border')) {
+            $config->border = $viewConfig->border;
+        }
+
+        return $config;
+
+
+        ///////////
+
 
         if ($viewConfig->has($thisStylesKey)) {
             $config = $viewConfig->get($thisStylesKey);
@@ -429,7 +533,8 @@ class Component
         $height = $this->height;
         $borders = $this->getBorder();
         $vpadding = $this->getVerticalPadding();
-        $height -= ($vpadding * 2) + ($borders * 2);
+        $height -= ($vpadding * 2);
+        $height -= ($borders * 2);
 
         return $height;
     }

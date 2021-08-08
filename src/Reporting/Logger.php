@@ -4,6 +4,7 @@ namespace PhpCli\Reporting;
 
 use PhpCli\Traits\HasConfig;
 use PhpCli\Reporting\Drivers\FileLogger;
+use PhpCli\Reporting\Drivers\BufferLogger;
 use PhpCli\Reporting\Drivers\StandardLogger;
 
 class Logger {
@@ -95,14 +96,14 @@ class Logger {
         $driver = new Logger($Config);
 
         switch ($driver->Config->driver) {
+            case 'buffer':
+                return BufferLogger::create($Config);
             case 'file':
                 return FileLogger::create($Config);
-                break;
             case 'stdout':
             case 'standard':
             default:
                 return StandardLogger::create($Config);
-                break;
         }
 
         return $driver;

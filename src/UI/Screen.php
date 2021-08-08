@@ -41,6 +41,20 @@ class Screen
         return $this->getComponent($name);
     }
 
+    /**
+     * Check if the Component has content.
+     * 
+     * @param string $name
+     * @return bool
+     */
+    public function componentHasContent(string $name): bool
+    {
+        if ($this->hasComponent($name)) {
+            return $this->getComponent($name)->hasContent();
+        }
+        return false;
+    }
+
     public function draw(bool $clear = false): void
     {
         if ($clear) {
@@ -58,7 +72,7 @@ class Screen
                 return implode(array_map(function ($char) {
                     if ($char === null) return ' ';
                     return $char;
-                }, $row->toArray()));
+                }, $row));
             }, $this->View->render()->toArray());
 
             $this->Application->output->lines($lines);
@@ -79,6 +93,28 @@ class Screen
         return $this->View->getComponent($name);
     }
 
+    public function hasComponent(string $name): bool
+    {
+        return $this->View->hasComponent($name);
+    }
+
+    public function getView(): ?View
+    {
+        if (isset($this->View)) {
+            return $this->View;
+        }
+
+        return null;
+    }
+
+    public function makeView(string $name = null, array $data = [], $config = null): View
+    {
+        $name = str_replace('.txt', '', $name);
+        $File = new File($this->Application->viewsPath() . '/' . $name . '.txt', File::EXISTS_READ_ONLY);
+
+        return new View($data, $File, $config);
+    }
+
     public function setContent($content): self
     {
         if ($content instanceof View) {
@@ -94,16 +130,9 @@ class Screen
         return $this;
     }
 
-    public function view(string $name = null, array $data = [], $config = null): View
+    public function view(string $name, array $data = [], $config = null): View
     {
-        if (!is_null($name) || !empty($data) || $config) {
-            if (is_null($name)) {
-                $File = $this->View->File();
-            } else {
-                $name = str_replace('.txt', '', $name);
-                $File = new File($this->Application->viewsPath() . '/' . $name . '.txt');
-            }
-
+        if (!empty($data) || $config) {
             if (empty($data) && isset($this->View)) {
                 $data = $this->View->data();
             }
@@ -112,10 +141,15 @@ class Screen
                 $config = $this->View->config();
             }
 
-            $this->View = new View($data, $File, $config);
+            $this->View = $this->makeView($name, $data, $config);
         }
 
         return $this->View;
+    }
+
+    public function setData(string $key, $value)
+    {
+        $this->getView()->$key = $value;
     }
 
     public function setView(View $View): self

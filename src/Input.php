@@ -9,9 +9,16 @@ class Input
 {
     private $buffer;
 
-    public static function prepare_prompt(string $prompt, $default = null): string
+    public static function prepare_prompt(string $prompt, $default = null, string $placeholder = null): string
     {
-        if (!is_null($default)) {
+        if (isset($placeholder)) {
+            $placeholder = Output::color($placeholder, 'dark_gray');
+        }
+
+        if (isset($default) || isset($placeholder)) {
+            $placeholder = $placeholder ? $placeholder . ':' : '';
+            $default ??= '';
+            
             // Separate provided suffix
             $suffix = '';
             while (in_array($char = substr($prompt, -1), [' ', ':', '?', '>', '$', '%'])) {
@@ -26,12 +33,13 @@ class Input
             if (preg_match('/.*\[([^)]*)\]$/', $prompt) !== 1) {
                 if (is_float($default)) {
                     if (substr($suffix, -1) === '$') {
-                        $prompt = sprintf('%s [$%01.2f]', rtrim($prompt), $default);
+                        $defaultString = sprintf('%s$%01.2f', $placeholder, $default);
                     } else {
-                        $prompt = sprintf('%s [%01.2f]', rtrim($prompt), $default);
+                        $defaultString = sprintf('%s%01.2f', $placeholder, $default);
                     }
+                    $prompt = sprintf('%s [%s]', rtrim($prompt), $defaultString);
                 } else {
-                    $prompt = rtrim($prompt) . ' [' . $default . ']';
+                    $prompt = rtrim($prompt) . ' [' . $placeholder . $default . ']';
                 }
             }
 
@@ -45,8 +53,12 @@ class Input
         return $prompt;
     }
 
-    public static function prompt($prompt, $default = null, Validator $validator = null)
+    public static function prompt($prompt, $default = null, Validator $validator = null, bool $saveRestore = false)
     {
+        if ($saveRestore) {
+            Cursor::save();
+        }
+
         $answer = static::readline($prompt);
 
         if (empty($answer) && !is_null($default)) {
@@ -58,6 +70,9 @@ class Input
                 // if validator does not have required return null
                 if (!$validator->hasRule('required')) {
                     return null;
+                }
+                if ($saveRestore) {
+                    Cursor::restore();
                 }
                 $answer = static::readline($prompt);
             }
