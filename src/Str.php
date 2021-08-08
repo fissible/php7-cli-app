@@ -64,7 +64,7 @@ class Str
             return substr($subject, $pos + strlen($delimiter));
         }
 
-        return $subject;
+        return '';
     }
 
     /**
@@ -81,7 +81,7 @@ class Str
             return substr($subject, 0, $pos);
         }
 
-        return $subject;
+        return '';
     }
 
     /**
